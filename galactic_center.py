@@ -1,13 +1,15 @@
 """Calculate reflected line profiles in the galactic center."""
 import numpy as numpy
+from astropy import constants as c
+from astropy import units as u
 from pylab import (arccos, array, clf, copy, cos, exp, hist, rand, scatter,
                    show, sin, sqrt, subplot, transpose, xlabel, ylabel)
 
 # unit conversion: (use astropy for this?)
 radians = numpy.pi / 180.   # deg to radians
-meters = 2.59 * 10**13.   # light days to meters
-kg = 1.999 * 10.**30.     # kg/solar mass
-grav = 6.67408 * 10**(-11.)  # m^3/kg/s^2 gravitational constant
+meters = ((1.0 * u.lyr) / (1.0 * u.yr)).si.value   # light days to meters
+kg = c.M_sun.si.value     # kg/solar mass
+grav = c.G.si.value  # m^3/kg/s^2 gravitational constant
 
 
 def star_position(time):
@@ -35,10 +37,10 @@ def star_luminosity():
     return luminosities
 
 
-def rotate(x, y, c, s):
+def rotate(x, y, co, si):
     """Rotate x, y position given cos/sin of angle."""
-    xx = c * x + s * y
-    yy = -s * x + c * y
+    xx = co * x + si * y
+    yy = -si * x + co * y
     x = xx
     y = yy
     return [x, y]
