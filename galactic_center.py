@@ -182,7 +182,7 @@ def compute_gas_flux(gas_coords, star_data, times, plot_flag=True):
                      (star_positions[j, 1] - gas_coords[1])**2. +
                      (star_positions[j, 2] - gas_coords[2])**2.)
             exclude = np.zeros(len(gas_coords[0]))
-            exclude[r >= 0.1 * meters] = 1.0
+            exclude[r >= 0.5 * meters] = 1.0
             gas_flux_values[:, j] = exclude * gas_coords[3] * \
                 star_luminosities[j] / (r * r)
         gas_flux[:, i] = np.sum(gas_flux_values, axis=1)
@@ -190,7 +190,7 @@ def compute_gas_flux(gas_coords, star_data, times, plot_flag=True):
         if plot_flag:
             # larger points correspond to more emission from the point
             gas_flux_norm = gas_flux[:, i] / sum(gas_flux[:, i])
-            ptsize = gas_flux_norm * 15 * num_clouds
+            ptsize = gas_flux_norm * 2 * num_clouds
             shade = 0.5
             clf()
             subplot(2, 3, 1)  # edge-on view 1, observer at +infinity of x-axis
@@ -270,7 +270,7 @@ def load_star_data():
 
 ########################################################################
 # Set constants:
-num_clouds = 1000
+num_clouds = 5000
 
 # Set model parameter values:
 mu = 5.   # mean radius of emission, in units of light days
@@ -301,7 +301,7 @@ other_params = [angular_sd_orbiting, radial_sd_orbiting,
                 angular_sd_flowing, radial_sd_flowing]
 
 # Set properties of predicted line profiles:
-times = np.linspace(1900, 2100, 200)
+times = np.linspace(1900, 2100, 5)
 wavelengths = 10   # this should be equally-spaced bins in lambda
 
 # Load physical data:
