@@ -2,28 +2,37 @@
 import numpy as np
 from astropy import constants as c
 from astropy import units as u
-from pylab import (arccos, array, clf, copy, cos, exp, hist, rand, scatter,
-                   show, sin, sqrt, subplot, transpose, xlabel, ylabel, plot, axis)
+from astropy.table import Table
+from PyAstronomy.modelSuite import KeplerEllipseModel
+from pylab import (arccos, axis, clf, copy, cos, exp, hist, plot, rand,
+                   savefig, scatter, show, sin, sqrt, subplot,
+                   xlabel, ylabel)
 
 # unit conversion: (use astropy for this?)
 radians = np.pi / 180.   # deg to radians
-meters = ((1.0 * u.lyr) / (1.0 * u.yr)).si.value   # light days to meters
+meters = 1.0 / (((1.0 * u.meter).si.value / (
+    1.0 * u.lyr / 365.25).si.value))   # light days to meters
 kg = c.M_sun.si.value     # kg/solar mass
 grav = c.G.si.value  # m^3/kg/s^2 gravitational constant
 
 
-def star_position(time):
+def star_position(kems, time):
     """Return the star positions for a given time."""
     # load in the star position file here:
 
     # calculate the position in cartesian coords:
 
     # random positions in a 20x20x20 box = x, y, z
-    num_stars = 10
-    box_size = 20.
-    positions = transpose(array([rand(num_stars) * box_size - box_size/2., 
-        rand(num_stars) * box_size - box_size/2., 
-        rand(num_stars) * box_size - box_size/2.])) * meters
+    # num_stars = 10
+    # box_size = 20.
+    # positions = transpose(array([
+    #     rand(num_stars) * box_size - box_size / 2.,
+    #     rand(num_stars) * box_size - box_size / 2.,
+    #     rand(num_stars) * box_size - box_size / 2.])) * meters
+
+    positions = np.array([
+        k.evaluate(np.array([time])).tolist() for k in kems]) * 1.9e14
+
     # print positions
     # print positions[:,0]  # all the x-coords
     # print positions[0,:]  # x,y,z of the first star
@@ -34,7 +43,7 @@ def star_luminosity():
     """Return the star luminosities."""
     # load in the star luminosity file here:
 
-    luminosities = rand(10)   # random numbers for testing
+    luminosities = rand(40)   # random numbers for testing
     # print luminosities
     return luminosities
 
@@ -105,7 +114,6 @@ def gas_model(num_clouds, params, other_params, plot_flag=True):
         ylabel("p(r)")
         show()
 
-
     # Now calculate velocities of the emitting gas:
     radius1 = sqrt(2. * grav * mbh / r)
     radius2 = sqrt(grav * mbh / r)
@@ -151,48 +159,61 @@ def gas_model(num_clouds, params, other_params, plot_flag=True):
 
     return [x, y, z, w, vx, vy, vz]
 
-def compute_gas_flux(gas_coords, times, plot_flag=True):
+
+def compute_gas_flux(gas_coords, star_data, times, plot_flag=True):
     """Calculate the flux contribution from each point particle.
-    Assumptions: light travel time from stars to gas plus the 
+
+    Assumptions: light travel time from stars to gas plus the
     recombination time is shorter than the time it takes the
-    stars to move in their orbits."""
-    gas_flux = np.zeros(( np.size(gas_coords[0]), np.size(times) ))
+    stars to move in their orbits.
+    """
+    gas_flux = np.zeros((np.size(gas_coords[0]), np.size(times)))
     # load in the star luminosities (if they are constant)
     star_luminosities = star_luminosity()
     # loop over times we want spectra
-    for i in xrange(np.size(times)):
-        star_positions = star_position(times[i])
-	gas_flux_values = np.zeros(( np.size(gas_coords[0]), np.size(star_positions[0]) ))
+    for i in range(np.size(times)):
+        star_positions = star_position(star_data, times[i])
+        gas_flux_values = np.zeros(
+            (np.size(gas_coords[0]), np.size(star_positions)))
 
-	# loop over the stars
-	for j in xrange(np.size(star_positions[0])):
-		r = sqrt((star_positions[j,0] - gas_coords[0])**2. + \
-                    (star_positions[j,1] - gas_coords[1])**2. + \
-                    (star_positions[j,2] - gas_coords[2])**2.)
-		gas_flux_values[:,j] = gas_coords[3] * star_luminosities[j]/(r * r)
-        gas_flux[:,i] = np.sum(gas_flux_values, axis=1)
+        # loop over the stars
+        for j in range(len(star_positions)):
+            r = sqrt((star_positions[j, 0] - gas_coords[0])**2. +
+                     (star_positions[j, 1] - gas_coords[1])**2. +
+                     (star_positions[j, 2] - gas_coords[2])**2.)
+            exclude = np.zeros(len(gas_coords[0]))
+            exclude[r >= 0.1 * meters] = 1.0
+            gas_flux_values[:, j] = exclude * gas_coords[3] * \
+                star_luminosities[j] / (r * r)
+        gas_flux[:, i] = np.sum(gas_flux_values, axis=1)
 
         if plot_flag:
             # larger points correspond to more emission from the point
-            gas_flux_norm = gas_flux[:,i] / sum(gas_flux[:,i])
+            gas_flux_norm = gas_flux[:, i] / sum(gas_flux[:, i])
             ptsize = gas_flux_norm * 15 * num_clouds
             shade = 0.5
             clf()
             subplot(2, 3, 1)  # edge-on view 1, observer at +infinity of x-axis
-            scatter(gas_coords[0] / meters, gas_coords[1] / meters, ptsize, alpha=shade)
-            plot(star_positions[:,0] / meters, star_positions[:,1] / meters, 'o', color='r')
+            scatter(gas_coords[0] / meters, gas_coords[1] /
+                    meters, ptsize, alpha=shade)
+            plot(star_positions[:, 0] / meters,
+                 star_positions[:, 1] / meters, 'o', color='r')
             axis('equal')
             xlabel("x")
             ylabel("y")
             subplot(2, 3, 2)  # edge-on view 2, observer at +infinity of x-axis
-            scatter(gas_coords[0] / meters, gas_coords[2] / meters, ptsize, alpha=shade)
-            plot(star_positions[:,0] / meters, star_positions[:,2] / meters, 'o', color='r')
+            scatter(gas_coords[0] / meters, gas_coords[2] /
+                    meters, ptsize, alpha=shade)
+            plot(star_positions[:, 0] / meters,
+                 star_positions[:, 2] / meters, 'o', color='r')
             axis('equal')
             xlabel("x")
             ylabel("z")
             subplot(2, 3, 3)   # view of observer looking at plane of sky
-            scatter(gas_coords[1] / meters, gas_coords[2] / meters, ptsize, alpha=shade)
-            plot(star_positions[:,1] / meters, star_positions[:,2] / meters, 'o', color='r')
+            scatter(gas_coords[1] / meters, gas_coords[2] /
+                    meters, ptsize, alpha=shade)
+            plot(star_positions[:, 1] / meters,
+                 star_positions[:, 2] / meters, 'o', color='r')
             axis('equal')
             xlabel("y")
             ylabel("z")
@@ -204,24 +225,47 @@ def compute_gas_flux(gas_coords, times, plot_flag=True):
             hist(gas_coords[4] / 10000000., weights=gas_flux_norm, bins=20)
             xlabel("v_x (10,000 km/s)")
             ylabel("Gas Flux (normalized)")
-            show()
+            # show()
+            savefig('frame-{}.png'.format(str(i).zfill(3)))
 
     return gas_flux
 
+
 def make_spectrum(gas_coords, gas_flux, times, wavelengths, plot_flag=True):
     """Make a spectrum for each time.
+
     This testing version has wavelengths = number of bins, but
-    the code should eventually be passed a vector of bin centers."""
-    #spectra = np.zeros(( np.size(times), np.size(wavelengths) ))
-    spectra = np.zeros(( np.size(times), int(wavelengths) ))
-    bin_edges = np.zeros(( np.size(times), int(wavelengths)+1 ))
-    for i in xrange(0, np.size(times)):
-        h = np.histogram(gas_coords[4], weights=gas_flux[:,i], bins=int(wavelengths))
-        spectra[i,:] = h[0]
-	bin_edges[i,:] = h[1]
+    the code should eventually be passed a vector of bin centers.
+    """
+    # spectra = np.zeros(( np.size(times), np.size(wavelengths) ))
+    spectra = np.zeros((np.size(times), int(wavelengths)))
+    bin_edges = np.zeros((np.size(times), int(wavelengths) + 1))
+    for i in range(0, np.size(times)):
+        h = np.histogram(
+            gas_coords[4], weights=gas_flux[:, i], bins=int(wavelengths))
+        spectra[i, :] = h[0]
+        bin_edges[i, :] = h[1]
 
     return [spectra, bin_edges]
 
+
+def load_star_data():
+    """Load stellar data."""
+    gdat = Table.read('gillessen-2017.txt', format='csv')
+    kems = []
+    for row in gdat:
+        kems.append(KeplerEllipseModel())
+        if row['type'] != 'e' or row['period'] <= 0.0:
+            continue
+        kems[-1]['a'] = row['a']
+        kems[-1]['e'] = row['e']
+        kems[-1]['per'] = row['period']
+        kems[-1]['tau'] = row['tperi']
+        kems[-1]['w'] = row['argperi']
+        kems[-1]['i'] = row['i']
+        kems[-1]['Omega'] = row['long']
+
+    return kems
 
 
 ########################################################################
@@ -257,14 +301,17 @@ other_params = [angular_sd_orbiting, radial_sd_orbiting,
                 angular_sd_flowing, radial_sd_flowing]
 
 # Set properties of predicted line profiles:
-times = [0.]
+times = np.linspace(1900, 2100, 200)
 wavelengths = 10   # this should be equally-spaced bins in lambda
+
+# Load physical data:
+star_data = load_star_data()
 
 # Calculate things:
 gas_coords = gas_model(num_clouds, params, other_params, plot_flag=False)
-gas_flux = compute_gas_flux(gas_coords, times, plot_flag=True)
-[spectra, bin_edges] = make_spectrum(gas_coords, gas_flux, times, 
-                         wavelengths, plot_flag=True)
+gas_flux = compute_gas_flux(gas_coords, star_data, times, plot_flag=True)
+[spectra, bin_edges] = make_spectrum(gas_coords, gas_flux, times,
+                                     wavelengths, plot_flag=True)
 
 """
 Still to do:
