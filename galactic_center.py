@@ -1,12 +1,12 @@
 """Calculate reflected line profiles in the galactic center."""
-import numpy as numpy
+import numpy as np
 from astropy import constants as c
 from astropy import units as u
 from pylab import (arccos, array, clf, copy, cos, exp, hist, rand, scatter,
-                   show, sin, sqrt, subplot, transpose, xlabel, ylabel)
+                   show, sin, sqrt, subplot, transpose, xlabel, ylabel, plot, axis)
 
 # unit conversion: (use astropy for this?)
-radians = numpy.pi / 180.   # deg to radians
+radians = np.pi / 180.   # deg to radians
 meters = ((1.0 * u.lyr) / (1.0 * u.yr)).si.value   # light days to meters
 kg = c.M_sun.si.value     # kg/solar mass
 grav = c.G.si.value  # m^3/kg/s^2 gravitational constant
@@ -19,9 +19,11 @@ def star_position(time):
     # calculate the position in cartesian coords:
 
     # random positions in a 20x20x20 box = x, y, z
-    positions = transpose(
-        array([rand(
-            10) * 20. - 10., rand(10) * 20. - 10., rand(10) * 20. - 10.]))
+    num_stars = 10
+    box_size = 20.
+    positions = transpose(array([rand(num_stars) * box_size - box_size/2., 
+        rand(num_stars) * box_size - box_size/2., 
+        rand(num_stars) * box_size - box_size/2.])) * meters
     # print positions
     # print positions[:,0]  # all the x-coords
     # print positions[0,:]  # x,y,z of the first star
@@ -41,13 +43,11 @@ def rotate(x, y, co, si):
     """Rotate x, y position given cos/sin of angle."""
     xx = co * x + si * y
     yy = -si * x + co * y
-    x = xx
-    y = yy
-    return [x, y]
+    return [xx, yy]
 
 
-def gas_model(num_clouds, params, other_params):
-    """Retrieve the model."""
+def gas_model(num_clouds, params, other_params, plot_flag=True):
+    """Retrieve the gas positions and velocities."""
     [mu, F, beta, theta_i, theta_o,
      kappa, mbh, f_ellip, f_flow, theta_e] = params
     [angular_sd_orbiting, radial_sd_orbiting,
@@ -55,8 +55,8 @@ def gas_model(num_clouds, params, other_params):
 
     # First calculate the geometry of the emission:
     r = mu * F + (1. - F) * mu * beta**2. * \
-        numpy.random.gamma(beta**(-2.), 1, num_clouds)
-    phi = 2. * numpy.pi * rand(num_clouds)
+        np.random.gamma(beta**(-2.), 1, num_clouds)
+    phi = 2. * np.pi * rand(num_clouds)
     x = r * cos(phi)
     y = r * sin(phi)
     z = r * 0.
@@ -66,10 +66,10 @@ def gas_model(num_clouds, params, other_params):
     cos1 = cos(angle)
     sin1 = sin(angle)
     u1 = rand(num_clouds)
-    cos2 = cos(2. * numpy.pi * u1)
-    sin2 = sin(2. * numpy.pi * u1)
-    cos3 = cos(0.5 * numpy.pi - theta_i)
-    sin3 = sin(0.5 * numpy.pi - theta_i)
+    cos2 = cos(2. * np.pi * u1)
+    sin2 = sin(2. * np.pi * u1)
+    cos3 = cos(0.5 * np.pi - theta_i)
+    sin3 = sin(0.5 * np.pi - theta_i)
 
     # rotate to puff up:
     [x, z] = rotate(x, z, cos1, sin1)
@@ -82,27 +82,29 @@ def gas_model(num_clouds, params, other_params):
     w = 0.5 + kappa * x / sqrt(x * x + y * y + z * z)
     w /= sum(w)
 
-    # larger points correspond to more emission from the point
-    ptsize = w * 15 * num_clouds
-    shade = 0.5
-    clf()
-    subplot(2, 2, 1)  # edge-on view 1, observer at +infinity of x-axis
-    scatter(x / meters, y / meters, ptsize, alpha=shade)
-    xlabel("x")
-    ylabel("y")
-    subplot(2, 2, 2)  # edge-on view 2, observer at +infinity of x-axis
-    scatter(x / meters, z / meters, ptsize, alpha=shade)
-    xlabel("x")
-    ylabel("z")
-    subplot(2, 2, 3)   # view of observer looking at plane of sky
-    scatter(y / meters, z / meters, ptsize, alpha=shade)
-    xlabel("y")
-    ylabel("z")
-    subplot(2, 2, 4)   # plot the radial distribution of emission
-    hist(r / meters, 100)
-    xlabel("r")
-    ylabel("p(r)")
-    show()
+    if plot_flag:
+        # larger points correspond to more emission from the point
+        ptsize = w * 15 * num_clouds
+        shade = 0.5
+        clf()
+        subplot(2, 2, 1)  # edge-on view 1, observer at +infinity of x-axis
+        scatter(x / meters, y / meters, ptsize, alpha=shade)
+        xlabel("x")
+        ylabel("y")
+        subplot(2, 2, 2)  # edge-on view 2, observer at +infinity of x-axis
+        scatter(x / meters, z / meters, ptsize, alpha=shade)
+        xlabel("x")
+        ylabel("z")
+        subplot(2, 2, 3)   # view of observer looking at plane of sky
+        scatter(y / meters, z / meters, ptsize, alpha=shade)
+        xlabel("y")
+        ylabel("z")
+        subplot(2, 2, 4)   # plot the radial distribution of emission
+        hist(r / meters, 100)
+        xlabel("r")
+        ylabel("p(r)")
+        show()
+
 
     # Now calculate velocities of the emitting gas:
     radius1 = sqrt(2. * grav * mbh / r)
@@ -111,18 +113,18 @@ def gas_model(num_clouds, params, other_params):
     vphi = copy(x) * 0.
 
     u5 = rand(num_clouds)
-    n1 = numpy.random.normal(size=num_clouds)
-    n2 = numpy.random.normal(size=num_clouds)
+    n1 = np.random.normal(size=num_clouds)
+    n2 = np.random.normal(size=num_clouds)
     for i in range(0, num_clouds):
         if u5[i] < f_ellip:
             # we give this point particle a near-circular orbit
-            theta = 0.5 * numpy.pi + angular_sd_orbiting * n1[i]
+            theta = 0.5 * np.pi + angular_sd_orbiting * n1[i]
             vr[i] = radius1[i] * cos(theta) * exp(radial_sd_orbiting * n2[i])
             vphi[i] = radius2[i] * sin(theta) * exp(radial_sd_orbiting * n2[i])
         else:
             if f_flow < 0.5:
                 # we give this point particle an inflowing orbit
-                theta = numpy.pi - theta_e + angular_sd_flowing * n1[i]
+                theta = np.pi - theta_e + angular_sd_flowing * n1[i]
                 vr[i] = radius1[i] * cos(theta) * \
                     exp(radial_sd_flowing * n2[i])
                 vphi[i] = radius2[i] * \
@@ -149,10 +151,84 @@ def gas_model(num_clouds, params, other_params):
 
     return [x, y, z, w, vx, vy, vz]
 
+def compute_gas_flux(gas_coords, times, plot_flag=True):
+    """Calculate the flux contribution from each point particle.
+    Assumptions: light travel time from stars to gas plus the 
+    recombination time is shorter than the time it takes the
+    stars to move in their orbits."""
+    gas_flux = np.zeros(( np.size(gas_coords[0]), np.size(times) ))
+    # load in the star luminosities (if they are constant)
+    star_luminosities = star_luminosity()
+    # loop over times we want spectra
+    for i in xrange(np.size(times)):
+        star_positions = star_position(times[i])
+	gas_flux_values = np.zeros(( np.size(gas_coords[0]), np.size(star_positions[0]) ))
 
+	# loop over the stars
+	for j in xrange(np.size(star_positions[0])):
+		r = sqrt((star_positions[j,0] - gas_coords[0])**2. + \
+                    (star_positions[j,1] - gas_coords[1])**2. + \
+                    (star_positions[j,2] - gas_coords[2])**2.)
+		gas_flux_values[:,j] = gas_coords[3] * star_luminosities[j]/(r * r)
+        gas_flux[:,i] = np.sum(gas_flux_values, axis=1)
+
+        if plot_flag:
+            # larger points correspond to more emission from the point
+            gas_flux_norm = gas_flux[:,i] / sum(gas_flux[:,i])
+            ptsize = gas_flux_norm * 15 * num_clouds
+            shade = 0.5
+            clf()
+            subplot(2, 3, 1)  # edge-on view 1, observer at +infinity of x-axis
+            scatter(gas_coords[0] / meters, gas_coords[1] / meters, ptsize, alpha=shade)
+            plot(star_positions[:,0] / meters, star_positions[:,1] / meters, 'o', color='r')
+            axis('equal')
+            xlabel("x")
+            ylabel("y")
+            subplot(2, 3, 2)  # edge-on view 2, observer at +infinity of x-axis
+            scatter(gas_coords[0] / meters, gas_coords[2] / meters, ptsize, alpha=shade)
+            plot(star_positions[:,0] / meters, star_positions[:,2] / meters, 'o', color='r')
+            axis('equal')
+            xlabel("x")
+            ylabel("z")
+            subplot(2, 3, 3)   # view of observer looking at plane of sky
+            scatter(gas_coords[1] / meters, gas_coords[2] / meters, ptsize, alpha=shade)
+            plot(star_positions[:,1] / meters, star_positions[:,2] / meters, 'o', color='r')
+            axis('equal')
+            xlabel("y")
+            ylabel("z")
+            subplot(2, 3, 4)   # plot the vx vs. gas flux
+            scatter(gas_coords[4] / 10000000., gas_flux_norm * 1000.)
+            xlabel("v_x (10,000 km/s)")
+            ylabel("Gas Flux (normalized)")
+            subplot(2, 3, 5)   # histogram of gas flux
+            hist(gas_coords[4] / 10000000., weights=gas_flux_norm, bins=20)
+            xlabel("v_x (10,000 km/s)")
+            ylabel("Gas Flux (normalized)")
+            show()
+
+    return gas_flux
+
+def make_spectrum(gas_coords, gas_flux, times, wavelengths, plot_flag=True):
+    """Make a spectrum for each time.
+    This testing version has wavelengths = number of bins, but
+    the code should eventually be passed a vector of bin centers."""
+    #spectra = np.zeros(( np.size(times), np.size(wavelengths) ))
+    spectra = np.zeros(( np.size(times), int(wavelengths) ))
+    bin_edges = np.zeros(( np.size(times), int(wavelengths)+1 ))
+    for i in xrange(0, np.size(times)):
+        h = np.histogram(gas_coords[4], weights=gas_flux[:,i], bins=int(wavelengths))
+        spectra[i,:] = h[0]
+	bin_edges[i,:] = h[1]
+
+    return [spectra, bin_edges]
+
+
+
+########################################################################
 # Set constants:
-num_clouds = 10000
+num_clouds = 1000
 
+# Set model parameter values:
 mu = 5.   # mean radius of emission, in units of light days
 F = 0.5   # minimum radius of emission, in units of fraction of mu
 # Gamma distribution radial profile shape parameter, between 0.01 and 2
@@ -161,8 +237,8 @@ theta_i = 70.   # inclination angle in deg, 0 deg is face-on
 # opening angle of disk in deg, 0 deg is thin disk, 90 deg is sphere
 theta_o = 5.
 # -0.5 emit back to center, 0 = isotropic emission, 0.5 emit away from center
-kappa = -0.5
-log_mbh = 7.    # log10(black hole mass) in solar masses
+kappa = 0.
+log_mbh = np.log10(4. * 10**6.)    # log10(black hole mass) in solar masses
 f_ellip = 0.1  # fraction of particles in near-circular orbits
 # 0-0.5 = inflow, 0.5-1 = outflow of fraction (1-f_ellip) of particles
 f_flow = 0.2
@@ -180,8 +256,22 @@ params = [mu * meters, F, beta, theta_i * radians, theta_o * radians, kappa,
 other_params = [angular_sd_orbiting, radial_sd_orbiting,
                 angular_sd_flowing, radial_sd_flowing]
 
+# Set properties of predicted line profiles:
+times = [0.]
+wavelengths = 10   # this should be equally-spaced bins in lambda
 
 # Calculate things:
-star_positions = star_position(0)
-star_luminosities = star_luminosity()
-gas_coords = gas_model(num_clouds, params, other_params)
+gas_coords = gas_model(num_clouds, params, other_params, plot_flag=False)
+gas_flux = compute_gas_flux(gas_coords, times, plot_flag=True)
+[spectra, bin_edges] = make_spectrum(gas_coords, gas_flux, times, 
+                         wavelengths, plot_flag=True)
+
+"""
+Still to do:
+* make kappa correspond to all light sources instead of origin
+* add real star position time evolution
+* add real star luminosities
+* add another axis of inclination angle
+* make real spectra based on specific wavelength bins
+* add simple GR wavelength corrections
+"""
