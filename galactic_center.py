@@ -6,7 +6,7 @@ from astropy.table import Table
 from PyAstronomy.modelSuite import KeplerEllipseModel
 from pylab import (arccos, axis, clf, copy, cos, exp, hist, plot, rand,
                    savefig, scatter, show, sin, sqrt, subplot,
-                   xlabel, ylabel)
+                   xlabel, ylabel, figure)
 
 # unit conversion: (use astropy for this?)
 radians = np.pi / 180.   # deg to radians
@@ -23,13 +23,14 @@ def star_position(kems, time):
     # calculate the position in cartesian coords:
 
     # random positions in a 20x20x20 box = x, y, z
-    # num_stars = 10
-    # box_size = 20.
-    # positions = transpose(array([
-    #     rand(num_stars) * box_size - box_size / 2.,
-    #     rand(num_stars) * box_size - box_size / 2.,
-    #     rand(num_stars) * box_size - box_size / 2.])) * meters
-
+    """
+    num_stars = 10
+    box_size = 20.
+    positions = np.transpose(np.array([
+        rand(num_stars) * box_size - box_size / 2.,
+        rand(num_stars) * box_size - box_size / 2.,
+        rand(num_stars) * box_size - box_size / 2.])) * meters
+    """
     positions = np.array([
         k.evaluate(np.array([time])).tolist() for k in kems]) * 1.9e14
 
@@ -57,7 +58,7 @@ def rotate(x, y, co, si):
 
 def gas_model(num_clouds, params, other_params, plot_flag=True):
     """Retrieve the gas positions and velocities."""
-    [mu, F, beta, theta_i, theta_o,
+    [mu, F, beta, theta_i, theta_i2, theta_o,
      kappa, mbh, f_ellip, f_flow, theta_e] = params
     [angular_sd_orbiting, radial_sd_orbiting,
         angular_sd_flowing, radial_sd_flowing] = other_params
@@ -79,6 +80,8 @@ def gas_model(num_clouds, params, other_params, plot_flag=True):
     sin2 = sin(2. * np.pi * u1)
     cos3 = cos(0.5 * np.pi - theta_i)
     sin3 = sin(0.5 * np.pi - theta_i)
+    cos4 = cos(0.5 * np.pi - theta_i2)
+    sin4 = sin(0.5 * np.pi - theta_i2)
 
     # rotate to puff up:
     [x, z] = rotate(x, z, cos1, sin1)
@@ -86,14 +89,16 @@ def gas_model(num_clouds, params, other_params, plot_flag=True):
     [x, y] = rotate(x, y, cos2, sin2)
     # rotate to apply inclination angle:
     [x, z] = rotate(x, z, cos3, sin3)
+    # rotate to apply second inclination angle:
+    [x, y] = rotate(x, y, cos4, sin4)
 
     # weights for the different points
-    w = 0.5 + kappa * x / sqrt(x * x + y * y + z * z)
-    w /= sum(w)
+    #w = 0.5 + kappa * x / sqrt(x * x + y * y + z * z)
+    #w /= sum(w)
 
     if plot_flag:
         # larger points correspond to more emission from the point
-        ptsize = w * 15 * num_clouds
+        ptsize = 5
         shade = 0.5
         clf()
         subplot(2, 2, 1)  # edge-on view 1, observer at +infinity of x-axis
@@ -156,17 +161,21 @@ def gas_model(num_clouds, params, other_params, plot_flag=True):
     [vx, vy] = rotate(vx, vy, cos2, sin2)
     # rotate to apply inclination angle:
     [vx, vz] = rotate(vx, vz, cos3, sin3)
+    # rotate to apply second inclination angle:
+    [vx, vy] = rotate(vx, vy, cos4, sin4)
 
-    return [x, y, z, w, vx, vy, vz]
+    return [x, y, z, vx, vy, vz]
 
 
-def compute_gas_flux(gas_coords, star_data, times, plot_flag=True):
+def compute_gas_flux(gas_coords, star_data, times, params, plot_flag=True):
     """Calculate the flux contribution from each point particle.
 
     Assumptions: light travel time from stars to gas plus the
     recombination time is shorter than the time it takes the
     stars to move in their orbits.
     """
+    [stellar_wind_radius, kappa] = params
+
     gas_flux = np.zeros((np.size(gas_coords[0]), np.size(times)))
     # load in the star luminosities (if they are constant)
     star_luminosities = star_luminosity()
@@ -182,8 +191,11 @@ def compute_gas_flux(gas_coords, star_data, times, plot_flag=True):
                      (star_positions[j, 1] - gas_coords[1])**2. +
                      (star_positions[j, 2] - gas_coords[2])**2.)
             exclude = np.zeros(len(gas_coords[0]))
-            exclude[r >= 0.5 * meters] = 1.0
-            gas_flux_values[:, j] = exclude * gas_coords[3] * \
+            exclude[r >= stellar_wind_radius * meters] = 1.0
+            # weights for the different points
+            w = 0.5 + kappa * ( gas_coords[0] - star_positions[j, 0] ) / r
+            #w /= sum(w)
+            gas_flux_values[:, j] = w * exclude * \
                 star_luminosities[j] / (r * r)
         gas_flux[:, i] = np.sum(gas_flux_values, axis=1)
 
@@ -193,6 +205,7 @@ def compute_gas_flux(gas_coords, star_data, times, plot_flag=True):
             ptsize = gas_flux_norm * 2 * num_clouds
             shade = 0.5
             clf()
+            figure(figsize=(18,12))
             subplot(2, 3, 1)  # edge-on view 1, observer at +infinity of x-axis
             scatter(gas_coords[0] / meters, gas_coords[1] /
                     meters, ptsize, alpha=shade)
@@ -218,14 +231,14 @@ def compute_gas_flux(gas_coords, star_data, times, plot_flag=True):
             xlabel("y")
             ylabel("z")
             subplot(2, 3, 4)   # plot the vx vs. gas flux
-            scatter(gas_coords[4] / 10000000., gas_flux_norm * 1000.)
+            scatter(gas_coords[3] / 10000000., gas_flux_norm * 1000.)
             xlabel("v_x (10,000 km/s)")
             ylabel("Gas Flux (normalized)")
             subplot(2, 3, 5)   # histogram of gas flux
-            hist(gas_coords[4] / 10000000., weights=gas_flux_norm, bins=20)
+            hist(gas_coords[3] / 10000000., weights=gas_flux_norm, bins=20)
             xlabel("v_x (10,000 km/s)")
             ylabel("Gas Flux (normalized)")
-            # show()
+            #show()
             savefig('frame-{}.png'.format(str(i).zfill(3)))
 
     return gas_flux
@@ -251,6 +264,8 @@ def make_spectrum(gas_coords, gas_flux, times, wavelengths, plot_flag=True):
 
 def load_star_data():
     """Load stellar data."""
+    kems = 1.
+    
     gdat = Table.read('gillessen-2017.txt', format='csv')
     kems = []
     for row in gdat:
@@ -264,7 +279,7 @@ def load_star_data():
         kems[-1]['w'] = row['argperi']
         kems[-1]['i'] = row['i']
         kems[-1]['Omega'] = row['long']
-
+    
     return kems
 
 
@@ -277,11 +292,12 @@ mu = 5.   # mean radius of emission, in units of light days
 F = 0.5   # minimum radius of emission, in units of fraction of mu
 # Gamma distribution radial profile shape parameter, between 0.01 and 2
 beta = 0.5
-theta_i = 70.   # inclination angle in deg, 0 deg is face-on
+theta_i = 10.   # x-z plane inclination angle in deg, 0 deg is face-on
+theta_i2 = 60.  # x-y plane inclination angle in deg, 0 deg is face-on
 # opening angle of disk in deg, 0 deg is thin disk, 90 deg is sphere
 theta_o = 5.
 # -0.5 emit back to center, 0 = isotropic emission, 0.5 emit away from center
-kappa = 0.
+kappa = -0.5
 log_mbh = np.log10(4. * 10**6.)    # log10(black hole mass) in solar masses
 f_ellip = 0.1  # fraction of particles in near-circular orbits
 # 0-0.5 = inflow, 0.5-1 = outflow of fraction (1-f_ellip) of particles
@@ -295,30 +311,32 @@ radial_sd_orbiting = 0.01
 angular_sd_flowing = 0.01
 radial_sd_flowing = 0.01
 
-params = [mu * meters, F, beta, theta_i * radians, theta_o * radians, kappa,
+stellar_wind_radius = 0.5   # light days, radius of exclusion for line emission
+
+params = [mu * meters, F, beta, theta_i * radians, theta_i2 * radians, 
+          theta_o * radians, kappa,
           kg * 10**log_mbh, f_ellip, f_flow, theta_e]  # work in SI units
-other_params = [angular_sd_orbiting, radial_sd_orbiting,
+params2 = [angular_sd_orbiting, radial_sd_orbiting,
                 angular_sd_flowing, radial_sd_flowing]
+params3 = [stellar_wind_radius, kappa]
 
 # Set properties of predicted line profiles:
 times = np.linspace(1900, 2100, 5)
+#times = [2017]
 wavelengths = 10   # this should be equally-spaced bins in lambda
 
 # Load physical data:
 star_data = load_star_data()
 
 # Calculate things:
-gas_coords = gas_model(num_clouds, params, other_params, plot_flag=False)
-gas_flux = compute_gas_flux(gas_coords, star_data, times, plot_flag=True)
+gas_coords = gas_model(num_clouds, params, params2, plot_flag=False)
+gas_flux = compute_gas_flux(gas_coords, star_data, times, params3, plot_flag=True)
 [spectra, bin_edges] = make_spectrum(gas_coords, gas_flux, times,
                                      wavelengths, plot_flag=True)
 
 """
 Still to do:
-* make kappa correspond to all light sources instead of origin
-* add real star position time evolution
 * add real star luminosities
-* add another axis of inclination angle
 * make real spectra based on specific wavelength bins
 * add simple GR wavelength corrections
 """
