@@ -321,7 +321,7 @@ params2 = [angular_sd_orbiting, radial_sd_orbiting,
 params3 = [stellar_wind_radius, kappa]
 
 # Set properties of predicted line profiles:
-times = np.linspace(1900, 2100, 5)
+times = np.linspace(1900, 2100, 200)
 #times = [2017]
 wavelengths = 10   # this should be equally-spaced bins in lambda
 
