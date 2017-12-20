@@ -5,8 +5,8 @@ from astropy import units as u
 from astropy.table import Table
 from PyAstronomy.modelSuite import KeplerEllipseModel
 from pylab import (arccos, axis, clf, copy, cos, exp, hist, plot, rand,
-                   savefig, scatter, show, sin, sqrt, subplot,
-                   xlabel, ylabel, figure)
+                   savefig, scatter, show, sin, sqrt, subplot, transpose,
+                   xlabel, ylabel)
 
 # unit conversion: (use astropy for this?)
 radians = np.pi / 180.   # deg to radians
@@ -103,16 +103,16 @@ def gas_model(num_clouds, params, other_params, plot_flag=True):
         clf()
         subplot(2, 2, 1)  # edge-on view 1, observer at +infinity of x-axis
         scatter(x / meters, y / meters, ptsize, alpha=shade)
-        xlabel("x")
-        ylabel("y")
+        xlabel('x')
+        ylabel('y')
         subplot(2, 2, 2)  # edge-on view 2, observer at +infinity of x-axis
         scatter(x / meters, z / meters, ptsize, alpha=shade)
-        xlabel("x")
-        ylabel("z")
+        xlabel('x')
+        ylabel('z')
         subplot(2, 2, 3)   # view of observer looking at plane of sky
         scatter(y / meters, z / meters, ptsize, alpha=shade)
-        xlabel("y")
-        ylabel("z")
+        xlabel('y')
+        ylabel('z')
         subplot(2, 2, 4)   # plot the radial distribution of emission
         hist(r / meters, 100)
         xlabel("r")
@@ -179,6 +179,38 @@ def compute_gas_flux(gas_coords, star_data, times, params, plot_flag=True):
     gas_flux = np.zeros((np.size(gas_coords[0]), np.size(times)))
     # load in the star luminosities (if they are constant)
     star_luminosities = star_luminosity()
+
+    # set up the plot first
+    if plot_flag:
+        shade = 0.5
+        axy = subplot(
+            2, 3, 1)  # edge-on view 1, observer at +infinity of x-axis
+        sxy = scatter([0.0], [0.0], alpha=shade)
+        pxy, = plot([0.0], [0.0], 'o', color='r')
+        axis('equal')
+        xlabel('x')
+        ylabel('y')
+        axz = subplot(
+            2, 3, 2)  # edge-on view 2, observer at +infinity of x-axis
+        sxz = scatter([0.0], [0.0], alpha=shade)
+        pxz, = plot([0.0], [0.0], 'o', color='r')
+        axis('equal')
+        xlabel('x')
+        ylabel('z')
+        ayz = subplot(2, 3, 3)   # view of observer looking at plane of sky
+        syz = scatter([0.0], [0.0], alpha=shade)
+        pyz, = plot([0.0], [0.0], 'o', color='r')
+        axis('equal')
+        xlabel('y')
+        ylabel('z')
+        avpl = subplot(2, 3, 4)   # plot the vx vs. gas flux
+        vpl = scatter([0.0], [0.0])
+        xlabel("v_x (10,000 km/s)")
+        ylabel("Gas Flux (normalized)")
+        ahpl = subplot(2, 3, 5)   # histogram of gas flux
+        xlabel("v_x (10,000 km/s)")
+        ylabel("Gas Flux (normalized)")
+
     # loop over times we want spectra
     for i in range(np.size(times)):
         star_positions = star_position(star_data, times[i])
@@ -203,42 +235,47 @@ def compute_gas_flux(gas_coords, star_data, times, params, plot_flag=True):
             # larger points correspond to more emission from the point
             gas_flux_norm = gas_flux[:, i] / sum(gas_flux[:, i])
             ptsize = gas_flux_norm * 2 * num_clouds
-            shade = 0.5
-            clf()
-            figure(figsize=(18,12))
-            subplot(2, 3, 1)  # edge-on view 1, observer at +infinity of x-axis
-            scatter(gas_coords[0] / meters, gas_coords[1] /
-                    meters, ptsize, alpha=shade)
-            plot(star_positions[:, 0] / meters,
-                 star_positions[:, 1] / meters, 'o', color='r')
-            axis('equal')
-            xlabel("x")
-            ylabel("y")
-            subplot(2, 3, 2)  # edge-on view 2, observer at +infinity of x-axis
-            scatter(gas_coords[0] / meters, gas_coords[2] /
-                    meters, ptsize, alpha=shade)
-            plot(star_positions[:, 0] / meters,
-                 star_positions[:, 2] / meters, 'o', color='r')
-            axis('equal')
-            xlabel("x")
-            ylabel("z")
-            subplot(2, 3, 3)   # view of observer looking at plane of sky
-            scatter(gas_coords[1] / meters, gas_coords[2] /
-                    meters, ptsize, alpha=shade)
-            plot(star_positions[:, 1] / meters,
-                 star_positions[:, 2] / meters, 'o', color='r')
-            axis('equal')
-            xlabel("y")
-            ylabel("z")
-            subplot(2, 3, 4)   # plot the vx vs. gas flux
-            scatter(gas_coords[3] / 10000000., gas_flux_norm * 1000.)
-            xlabel("v_x (10,000 km/s)")
-            ylabel("Gas Flux (normalized)")
-            subplot(2, 3, 5)   # histogram of gas flux
-            hist(gas_coords[3] / 10000000., weights=gas_flux_norm, bins=20)
-            xlabel("v_x (10,000 km/s)")
-            ylabel("Gas Flux (normalized)")
-            #show()
+
+            xy = transpose(np.array(gas_coords[:2]) / meters)
+            sxy.set_sizes(ptsize)
+            sxy.set_offsets(xy)
+            x = star_positions[:, 0] / meters
+            y = star_positions[:, 1] / meters
+            pxy.set_data(x, y)
+            axy.relim()
+            axy.autoscale_view(True, True, True)
+
+            xz = transpose(np.array(gas_coords[:3:2]) / meters)
+            sxz.set_sizes(ptsize)
+            sxz.set_offsets(xz)
+            x = star_positions[:, 0] / meters
+            y = star_positions[:, 2] / meters
+            pxz.set_data(x, y)
+            axz.relim()
+            axz.autoscale_view(True, True, True)
+
+            yz = transpose(np.array(gas_coords[1:3]) / meters)
+            syz.set_sizes(ptsize)
+            syz.set_offsets(yz)
+            x = star_positions[:, 1] / meters
+            y = star_positions[:, 2] / meters
+            pyz.set_data(x, y)
+            ayz.relim()
+            ayz.autoscale_view(True, True, True)
+
+            vx = transpose(
+                np.array([gas_coords[4] / 10000000.,
+                          gas_flux_norm * 1000.]))
+            vpl.set_offsets(vx)
+            avpl.relim()
+            avpl.autoscale_view(True, True, True)
+
+            # No `set_data` for `hist`.
+            ahpl.cla()
+            hist(gas_coords[4] / 10000000., weights=gas_flux_norm, bins=20)
+            ahpl.relim()
+            ahpl.autoscale_view(True, True, True)
+            # show()
             savefig('frame-{}.png'.format(str(i).zfill(3)))
 
     return gas_flux
@@ -322,7 +359,6 @@ params3 = [stellar_wind_radius, kappa]
 
 # Set properties of predicted line profiles:
 times = np.linspace(1900, 2100, 200)
-#times = [2017]
 wavelengths = 10   # this should be equally-spaced bins in lambda
 
 # Load physical data:
