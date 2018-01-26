@@ -1,4 +1,5 @@
 """Calculate reflected line profiles in the galactic center."""
+import matplotlib.pyplot as plt
 import numpy as np
 from astropy import constants as c
 from astropy import units as u
@@ -14,6 +15,14 @@ meters = 1.0 / (((1.0 * u.meter).si.value / (
     1.0 * u.lyr / 365.25).si.value))   # light days to meters
 kg = c.M_sun.si.value     # kg/solar mass
 grav = c.G.si.value  # m^3/kg/s^2 gravitational constant
+
+
+def get_cmap(n, name='hsv'):
+    """Return a function that maps 0, 1, ..., n-1 to a distinct RGB color.
+
+    The keyword argument name must be a standard mpl colormap name.
+    """
+    return plt.cm.get_cmap(name, n)
 
 
 def star_position(kems, time):
@@ -182,10 +191,12 @@ def compute_gas_flux(gas_coords, star_data, times, params, plot_flag=True):
 
     # set up the plot first
     if plot_flag:
+        cmap = get_cmap(len(star_data))
+        star_colors = [cmap(i) for i in range(len(star_data))]
         shade = 0.5
         min_ptsize = 1.0
         max_ptsize = 8.0
-        ssize = 8.0
+        ssize = 5.0
         boxsize = 10.0
         fig = figure(figsize=(14, 9))
         # edge-on view 1, observer at +infinity of x-axis
@@ -258,6 +269,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, plot_flag=True):
             sxy.set_offsets(xy)
             xy = star_positions[:, :2] / meters
             pxy.set_offsets(xy)
+            pxy.set_facecolors(star_colors)
             axy.set_xlim(-boxsize, boxsize)
             axy.set_ylim(-boxsize, boxsize)
 
@@ -266,6 +278,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, plot_flag=True):
             sxz.set_offsets(xz)
             xz = star_positions[:, :3:2] / meters
             pxz.set_offsets(xz)
+            pxz.set_facecolors(star_colors)
             axz.set_xlim(-boxsize, boxsize)
             axz.set_ylim(-boxsize, boxsize)
 
@@ -274,6 +287,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, plot_flag=True):
             syz.set_offsets(yz)
             yz = star_positions[:, 1:3] / meters
             pyz.set_offsets(yz)
+            pyz.set_facecolors(star_colors)
             ayz.set_xlim(-boxsize, boxsize)
             ayz.set_ylim(-boxsize, boxsize)
 
