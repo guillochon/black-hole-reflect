@@ -307,7 +307,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, plot_flag=True):
             ahpl.relim()
             ahpl.autoscale_view(True, True, True)
             # show()
-            savefig('frame-{}.png'.format(str(i).zfill(3)),
+            savefig('figs/frame-{}.png'.format(str(i).zfill(3)),
                     transparent=True, bbox_inches='tight', dpi=2 * 72)
 
     return gas_flux
