@@ -1,6 +1,8 @@
 """Calculate reflected line profiles in the galactic center."""
 import matplotlib.pyplot as plt
 import numpy as np
+
+from scipy.integrate import quad
 from astropy import constants as c
 from astropy import units as u
 from astropy.table import Table
@@ -18,8 +20,22 @@ meters = 1.0 / (((1.0 * u.meter).si.value / (
     1.0 * u.lyr / 365.25).si.value))   # light days to meters
 kg = c.M_sun.si.value     # kg/solar mass
 grav = c.G.si.value  # m^3/kg/s^2 gravitational constant
-c = 299792458.   # m/s
-G = 6.67408*10**(-11.)  # m^3 kg^-1 s^-2
+eV = (1.0 * u.eV).si.value  # electron volt
+h = c.h.si.value  # Planck's constant
+kb = c.k_B.si.value  # Boltzmann's constant
+cc = c.c.si.value  # Speed of light
+
+
+def ionizing_luminosity_fraction(temp, cutoff=13.6):
+    """Calculate the total ionizing luminosity given a temp/cutoff energey."""
+    nulow = cutoff * eV / h
+    nuhi = 100 * nulow
+    value = (2.0 * h / cc ** 2) * quad(
+        lambda nu: nu ** 3 / (np.expm1(
+            h * nu / (kb * temp))), nulow, nuhi)[0] / (
+                2 * (np.pi * kb * temp) ** 4 / (15 * h ** 3 * cc ** 2))
+    return value
+
 
 
 def get_cmap(n, name='hsv'):
@@ -54,12 +70,27 @@ def star_position(kems, time):
     return positions
 
 
-def star_luminosity():
+def star_luminosity(star_data):
     """Return the star luminosities."""
     # load in the star luminosity file here:
 
-    luminosities = rand(40)   # random numbers for testing
-    # print luminosities
+    # Find the dimmest star in Habibi:
+    min_l = np.inf
+    for xi, x in enumerate(star_data):
+        if x[2] is not None and x[2]['log_l'] < min_l:
+            min_l = x[2]['log_l']
+            min_k = x[2]['k_magnitude']
+            min_t = x[2]['temperature']
+
+    min_l = 10.0 ** min_l
+
+    # luminosities in solar luminosities.
+    luminosities = [
+        (min_l * 10.0 ** ((float(x[1]['kmag']) - float(min_k)) / 2.5))
+        if x[2] is None else (10.0 ** x[2]['log_l']) for x in star_data]
+    temps = [min_t if x[2] is None else x[2]['temperature'] for x in star_data]
+    luminosities *= np.array(list(map(
+        lambda x: ionizing_luminosity_fraction(x), temps)))
     return luminosities
 
 
@@ -78,7 +109,7 @@ def gas_model(num_clouds, params, other_params, lambdaCen, plot_flag=True):
         angular_sd_flowing, radial_sd_flowing] = other_params
 
     # Schwarzschild radius
-    Rs = 2.*G*mbh/c**2.
+    Rs = 2.*grav*mbh/cc**2.
 
     # First calculate the geometry of the emission:
     r = mu * F + (1. - F) * mu * beta**2. * \
@@ -197,7 +228,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
 
     gas_flux = np.zeros((np.size(gas_coords[0]), np.size(times)))
     # load in the star luminosities (if they are constant)
-    star_luminosities = star_luminosity()
+    star_luminosities = star_luminosity(star_data)
 
     # set up the plot first
     if plot_flag:
@@ -257,8 +288,10 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
         fig.tight_layout()
 
     # loop over times we want spectra
+    star_pos_models = [x[0] for x in star_data]
+
     for i in range(np.size(times)):
-        star_positions = star_position(star_data, times[i])
+        star_positions = star_position(star_pos_models, times[i])
         gas_flux_values = np.zeros(
             (np.size(gas_coords[0]), np.size(star_positions)))
 
@@ -378,12 +411,12 @@ def relativity(vx, r, Rs, lambdaCen):
     # Calculate the wavelength expected for each velocity using the following SR/GR:
     # Go from vx to wavelength using SR doppler shift, then add GR grav. z
     # SR radial velocity redshift
-    factor1 = sqrt((1. - vx/c)/(1. + vx/c))
+    factor1 = sqrt((1. - vx/cc)/(1. + vx/cc))
     # GR gravitational redshift
     factor2 = 1./sqrt(1. - Rs/r)
     lambda_list = factor1*factor2*lambdaCen
     for i in range(0, np.size(vx)):
-    	if vx[i] >= c:
+    	if vx[i] >= cc:
            lambda_list[i] = 1.0
            print("Warning! Speeds of light approaching c!")
     return lambda_list
@@ -394,18 +427,27 @@ def load_star_data():
     kems = 1.
 
     gdat = Table.read('gillessen-2017.txt', format='csv')
+    hdat = Table.read('habibi-2017.txt', format='csv')
+    hnames = [x['name'] for x in hdat]
     kems = []
     for row in gdat:
         if row['type'] != 'e' or row['period'] <= 0.0:
             continue
-        kems.append(KeplerEllipseModel())
-        kems[-1]['a'] = row['a']
-        kems[-1]['e'] = row['e']
-        kems[-1]['per'] = row['period']
-        kems[-1]['tau'] = row['tperi']
-        kems[-1]['w'] = row['argperi']
-        kems[-1]['i'] = row['i']
-        kems[-1]['Omega'] = row['long']
+        km = KeplerEllipseModel()
+        km['a'] = row['a']
+        km['e'] = row['e']
+        km['per'] = row['period']
+        km['tau'] = row['tperi']
+        km['w'] = row['argperi']
+        km['i'] = row['i']
+        km['Omega'] = row['long']
+
+        if row['name'] in hnames:
+            drow = [km, row, [x for x in hdat if x['name'] == row['name']][0]]
+        else:
+            drow = [km, row, None]
+
+        kems.append(drow)
 
     return kems
 
