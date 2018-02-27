@@ -224,7 +224,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
     """
     [stellar_wind_radius, kappa] = params
 
-    gas_flux = np.zeros((np.size(gas_coords[0]), np.size(times)))
+    #gas_flux = np.zeros((np.size(gas_coords[0]), np.size(times)))
     # load in the star luminosities (if they are constant)
     star_luminosities = star_luminosity(star_data)
 
@@ -289,6 +289,10 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
     # loop over times we want spectra
     star_pos_models = [x[0] for x in star_data]
 
+    num_stars = len(star_position(star_pos_models, times[0]))
+    gas_flux = np.zeros((np.size(gas_coords[0]), np.size(times)))
+    star_gas_flux = np.zeros((np.size(gas_coords[0]), np.size(times), num_stars))
+
     for i in range(np.size(times)):
         star_positions = star_position(star_pos_models, times[i])
         gas_flux_values = np.zeros(
@@ -306,10 +310,15 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
             # w /= sum(w)
             gas_flux_values[:, j] = w * exclude * \
                 star_luminosities[j] / (r * r)
+            star_gas_flux[:, i, j] = gas_flux_values[:,j]
         gas_flux[:, i] = np.sum(gas_flux_values, axis=1)
 
     [spectra, wavelength_bins] = make_spectrum(gas_coords, gas_flux, times,
                                                bins, plot_flag=False)
+
+    # loop over the stars to make a spectrum for each star
+    star_spectra = make_star_spectrum(gas_coords, star_gas_flux, times,
+                                               bins, num_stars, plot_flag=False)
 
     # loop over times we want spectra
     for i in range(np.size(times)):
@@ -376,6 +385,39 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
                     transparent=True, bbox_inches='tight', dpi=2 * 72)
 
     return gas_flux
+
+
+
+def make_star_spectrum(gas_coords, star_gas_flux, times, bins, num_stars, plot_flag=True):
+    """Make a spectrum for each time.
+
+    You specify the number of bins at initiation and then the code
+    figures out what the maximum and minimum bin should be
+    """
+    #star_gas_flux = np.zeros((np.size(gas_coords[0]), np.size(times), num_stars))
+    [x, y, z, vx, vy, vz, wavelength_values] = gas_coords
+
+    star_spectra = np.zeros((np.size(times), int(bins), num_stars))
+    min_lam = min(wavelength_values)
+    max_lam = max(wavelength_values)
+    lam_range = max_lam - min_lam
+    bin_centers = np.linspace(min_lam, max_lam, bins)
+    lam_bin = bin_centers[1] - bin_centers[0]
+    lam_left = bin_centers - lam_bin / 2.
+
+    # loop over the point particles for each star to put them in bins:
+    for k in range(0, num_stars):
+        for j in range(0, np.size(times)):
+            for i in range(0, np.size(vx)):
+                lamBin = int((wavelength_values[i] - min_lam) / lam_bin)
+                star_spectra[j, lamBin, k] += star_gas_flux[i, j, k]
+
+    if plot_flag:
+        for i in range(0, num_stars):
+            plot(bin_centers, star_spectra[0, :, i])
+        show()
+
+    return [star_spectra, bin_centers]
 
 
 def make_spectrum(gas_coords, gas_flux, times, bins, plot_flag=True):
