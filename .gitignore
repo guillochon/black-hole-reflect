@@ -1,3 +1,4 @@
 *.swp
 figs/*.png
 *.prof
+.DS_Store
