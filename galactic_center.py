@@ -1,18 +1,17 @@
 """Calculate reflected line profiles in the galactic center."""
 import matplotlib.pyplot as plt
 import numpy as np
-
-from scipy.integrate import quad
 from astropy import constants as c
 from astropy import units as u
 from astropy.table import Table
 from PyAstronomy.modelSuite import KeplerEllipseModel
-from pylab import (arccos, axis, clf, copy, cos, exp, figure, hist, rand,
-                   savefig, scatter, show, sin, sqrt, subplot, plot, transpose,
+from pylab import (arccos, axis, clf, copy, cos, exp, figure, hist, plot, rand,
+                   savefig, scatter, show, sin, sqrt, subplot, transpose,
                    xlabel, ylabel)
+from scipy.integrate import quad
 
-plt.rcParams['text.usetex']=True
-plt.rcParams['text.latex.unicode']=True
+plt.rcParams['text.usetex'] = True
+plt.rcParams['text.latex.unicode'] = True
 
 # unit conversion: (use astropy for this?)
 radians = np.pi / 180.   # deg to radians
@@ -35,7 +34,6 @@ def ionizing_luminosity_fraction(temp, cutoff=13.6):
             h * nu / (kb * temp))), nulow, nuhi)[0] / (
                 2 * (np.pi * kb * temp) ** 4 / (15 * h ** 3 * cc ** 2))
     return value
-
 
 
 def get_cmap(n, name='hsv'):
@@ -109,7 +107,7 @@ def gas_model(num_clouds, params, other_params, lambdaCen, plot_flag=True):
         angular_sd_flowing, radial_sd_flowing] = other_params
 
     # Schwarzschild radius
-    Rs = 2.*grav*mbh/cc**2.
+    Rs = 2. * grav * mbh / cc**2.
 
     # First calculate the geometry of the emission:
     r = mu * F + (1. - F) * mu * beta**2. * \
@@ -274,17 +272,18 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
         avpl = subplot(2, 3, 4)   # plot the vx vs. gas flux
         vpl = scatter([0.0], [0.0], alpha=shade, s=min_ptsize,
                       edgecolors='black', linewidths=0.5)
-        xlabel("v_x (10,000 km/s)")
+        xlabel("$v_x$ (10,000 km/s)")
         ylabel("Gas Flux (normalized)")
 
         ahpl = subplot(2, 3, 5)   # histogram of gas flux
-        xlabel("v_x (10,000 km/s)")
+        xlabel("$v_x$ (10,000 km/s)")
         ylabel("Gas Flux (normalized)")
-        
+
         sppl = subplot(2, 3, 6)   # histogram of gas flux
+        sline, = plot([0.0, 0.0])
         xlabel("$\\lambda \\,\\,\\, (\\AA )$")
         ylabel("$\\rm Line \\,\\,\\, Flux \\,\\,\\, (normalized)$")
-        
+
         fig.tight_layout()
 
     # loop over times we want spectra
@@ -309,9 +308,8 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
                 star_luminosities[j] / (r * r)
         gas_flux[:, i] = np.sum(gas_flux_values, axis=1)
 
-
     [spectra, wavelength_bins] = make_spectrum(gas_coords, gas_flux, times,
-                                    bins, plot_flag=False)
+                                               bins, plot_flag=False)
 
     # loop over times we want spectra
     for i in range(np.size(times)):
@@ -365,10 +363,13 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
             ahpl.relim()
             ahpl.autoscale_view(True, True, True)
 
-            sppl.cla()
-            plot(wavelength_bins, spectra[i])
-            sppl.relim()
-            sppl.autoscale_view(True, True, True)
+            sline.set_data(wavelength_bins, spectra[i])
+            minx = np.min(wavelength_bins)
+            maxx = np.max(wavelength_bins)
+            miny = np.min(spectra[i])
+            maxy = np.max(spectra[i])
+            sppl.set_xlim(minx, maxx)
+            sppl.set_ylim(miny, maxy)
 
             # show()
             savefig('figs/frame-{}.png'.format(str(i).zfill(3)),
@@ -390,20 +391,20 @@ def make_spectrum(gas_coords, gas_flux, times, bins, plot_flag=True):
     max_lam = max(wavelength_values)
     lam_range = max_lam - min_lam
     bin_centers = np.linspace(min_lam, max_lam, bins)
-    lam_bin = bin_centers[1]-bin_centers[0]
-    lam_left = bin_centers - lam_bin/2.
+    lam_bin = bin_centers[1] - bin_centers[0]
+    lam_left = bin_centers - lam_bin / 2.
 
     # loop over the point particles to put them in bins:
     for j in range(0, np.size(times)):
         for i in range(0, np.size(vx)):
-            lamBin = int((wavelength_values[i] - min_lam)/lam_bin)
-            spectra[j, lamBin] += gas_flux[i,j]
+            lamBin = int((wavelength_values[i] - min_lam) / lam_bin)
+            spectra[j, lamBin] += gas_flux[i, j]
 
     if plot_flag:
         for i in range(0, np.size(times)):
             plot(bin_centers, spectra[i])
         show()
-    
+
     return [spectra, bin_centers]
 
 
@@ -411,14 +412,14 @@ def relativity(vx, r, Rs, lambdaCen):
     # Calculate the wavelength expected for each velocity using the following SR/GR:
     # Go from vx to wavelength using SR doppler shift, then add GR grav. z
     # SR radial velocity redshift
-    factor1 = sqrt((1. - vx/cc)/(1. + vx/cc))
+    factor1 = sqrt((1. - vx / cc) / (1. + vx / cc))
     # GR gravitational redshift
-    factor2 = 1./sqrt(1. - Rs/r)
-    lambda_list = factor1*factor2*lambdaCen
+    factor2 = 1. / sqrt(1. - Rs / r)
+    lambda_list = factor1 * factor2 * lambdaCen
     for i in range(0, np.size(vx)):
-    	if vx[i] >= cc:
-           lambda_list[i] = 1.0
-           print("Warning! Speeds of light approaching c!")
+        if vx[i] >= cc:
+            lambda_list[i] = 1.0
+            print("Warning! Speeds of light approaching c!")
     return lambda_list
 
 
@@ -454,7 +455,7 @@ def load_star_data():
 
 ########################################################################
 # Set constants:
-num_clouds = 10000
+num_clouds = 2000
 
 # Set model parameter values:
 mu = 5.   # mean radius of emission, in units of light days
@@ -490,10 +491,11 @@ params2 = [angular_sd_orbiting, radial_sd_orbiting,
 params3 = [stellar_wind_radius, kappa]
 
 # Set properties of predicted line profiles:
-#times = np.linspace(1900, 2100, 400)
-times = np.linspace(1900, 2100, 5)
+times = np.linspace(1900, 2100, 200)
+# times = np.linspace(1900, 2100, 5)
 bins = 100   # this should be equally-spaced bins in lambda
-lambdaCen = 4861.33   # Hbeta in Angstroms
+# lambdaCen = 4861.33   # Hbeta in Angstroms
+lambdaCen = 12936600.0  # H30alpha in Angstroms
 
 # Load physical data:
 star_data = load_star_data()
