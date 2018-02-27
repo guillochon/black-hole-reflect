@@ -4,12 +4,12 @@ import numpy as np
 from astropy import constants as c
 from astropy import units as u
 from astropy.table import Table
+from matplotlib import cm
 from PyAstronomy.modelSuite import KeplerEllipseModel
 from pylab import (arccos, axis, clf, copy, cos, exp, figure, hist, plot, rand,
                    savefig, scatter, show, sin, sqrt, subplot, transpose,
                    xlabel, ylabel)
 from scipy.integrate import quad
-from matplotlib import cm
 
 plt.rcParams['text.usetex'] = True
 plt.rcParams['text.latex.unicode'] = True
@@ -225,14 +225,12 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
     """
     [stellar_wind_radius, kappa] = params
 
-    gas_flux = np.zeros((np.size(gas_coords[0]), np.size(times)))
+    #gas_flux = np.zeros((np.size(gas_coords[0]), np.size(times)))
     # load in the star luminosities (if they are constant)
     star_luminosities = star_luminosity(star_data)
 
     # set up the plot first
     if plot_flag:
-        cmap = get_cmap(len(star_data))
-        star_colors = [cmap(i) for i in range(len(star_data))]
         shade = 0.5
         min_ptsize = 1.0
         max_ptsize = 8.0
@@ -290,6 +288,11 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
     # loop over times we want spectra
     star_pos_models = [x[0] for x in star_data]
 
+    num_stars = len(star_position(star_pos_models, times[0]))
+    gas_flux = np.zeros((np.size(gas_coords[0]), np.size(times)))
+    star_gas_flux = np.zeros(
+        (np.size(gas_coords[0]), np.size(times), num_stars))
+
     for i in range(np.size(times)):
         star_positions = star_position(star_pos_models, times[i])
         gas_flux_values = np.zeros(
@@ -307,6 +310,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
             # w /= sum(w)
             gas_flux_values[:, j] = w * exclude * \
                 star_luminosities[j] / (r * r)
+            star_gas_flux[:, i, j] = gas_flux_values[:, j]
         gas_flux[:, i] = np.sum(gas_flux_values, axis=1)
 
     [spectra, wavelength_bins] = make_spectrum(gas_coords, gas_flux, times,
@@ -315,10 +319,20 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
     current_star_positions = star_position(star_pos_models, 2018.0)
     current_star_distances = [
         np.linalg.norm(x) for x in current_star_positions]
+    csd_js = np.argsort(current_star_distances)
+
+    star_colors = np.array([
+        cm.gist_rainbow(float(j) / (len(star_data) - 1))
+        for j in range(len(star_data))])
+
+    # loop over the stars to make a spectrum for each star
+    star_spectra = make_star_spectrum(gas_coords, star_gas_flux, times,
+                                      bins, num_stars, plot_flag=False)
 
     # loop over times we want spectra
     for i in range(np.size(times)):
         if plot_flag:
+            star_positions = star_position(star_pos_models, times[i])
             # larger points correspond to more emission from the point
             gas_flux_norm = gas_flux[:, i] / sum(gas_flux[:, i])
             ptsizes = 2 * num_clouds * gas_flux_norm ** 2
@@ -328,7 +342,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
             xy = transpose(np.array(gas_coords[:2]) / meters)
             sxy.set_sizes(ptsizes)
             sxy.set_offsets(xy)
-            xy = star_positions[:, :2] / meters
+            xy = star_positions[csd_js, :2] / meters
             pxy.set_offsets(xy)
             pxy.set_facecolors(star_colors)
             axy.set_xlim(-boxsize, boxsize)
@@ -337,7 +351,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
             xz = transpose(np.array(gas_coords[:3:2]) / meters)
             sxz.set_sizes(ptsizes)
             sxz.set_offsets(xz)
-            xz = star_positions[:, :3:2] / meters
+            xz = star_positions[csd_js, :3:2] / meters
             pxz.set_offsets(xz)
             pxz.set_facecolors(star_colors)
             axz.set_xlim(-boxsize, boxsize)
@@ -346,7 +360,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
             yz = transpose(np.array(gas_coords[1:3]) / meters)
             syz.set_sizes(ptsizes)
             syz.set_offsets(yz)
-            yz = star_positions[:, 1:3] / meters
+            yz = star_positions[csd_js, 1:3] / meters
             pyz.set_offsets(yz)
             pyz.set_facecolors(star_colors)
             ayz.set_xlim(-boxsize, boxsize)
@@ -377,25 +391,58 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
             # sppl.set_ylim(miny, maxy)
 
             sppl.cla()
-            aspectra = np.add.accumulate(spectra[i], axis=1)
-            js = np.argsort(current_star_distances)
+            aspectra = star_spectra[i, :, csd_js]
+            aspectra = np.add.accumulate(aspectra, axis=0)
             for j in range(len(aspectra) - 1):
-                col = cm.gist_rainbow(
-                    np.round((255.0 * js[j]) / (len(aspectra) - 1)))
-                sppl.plot(wavelength_bins, aspectra[j], color=col)
-                if j == len(aspectra) - 1:
-                    continue
+                col = star_colors[j]
+                sppl.plot(
+                    wavelength_bins, aspectra[j], color=col, lw=0.5)
                 sppl.fill_between(
-                    wavelength_bins, aspectra[j], aspectra[j + 1],
+                    wavelength_bins,
+                    aspectra[j - 1] if j > 0 else 0, aspectra[j],
                     facecolor=col, alpha=0.5)
             sppl.relim()
             sppl.autoscale_view(True, True, True)
+
+            fig.canvas.draw_idle()
 
             # show()
             savefig('figs/frame-{}.png'.format(str(i).zfill(3)),
                     transparent=True, bbox_inches='tight', dpi=2 * 72)
 
     return gas_flux
+
+
+def make_star_spectrum(gas_coords, star_gas_flux, times, bins, num_stars, plot_flag=True):
+    """Make a spectrum for each time.
+
+    You specify the number of bins at initiation and then the code
+    figures out what the maximum and minimum bin should be
+    """
+    #star_gas_flux = np.zeros((np.size(gas_coords[0]), np.size(times), num_stars))
+    [x, y, z, vx, vy, vz, wavelength_values] = gas_coords
+
+    star_spectra = np.zeros((np.size(times), int(bins), num_stars))
+    min_lam = min(wavelength_values)
+    max_lam = max(wavelength_values)
+    lam_range = max_lam - min_lam
+    bin_centers = np.linspace(min_lam, max_lam, bins)
+    lam_bin = bin_centers[1] - bin_centers[0]
+    lam_left = bin_centers - lam_bin / 2.
+
+    # loop over the point particles for each star to put them in bins:
+    for k in range(0, num_stars):
+        for j in range(0, np.size(times)):
+            for i in range(0, np.size(vx)):
+                lamBin = int((wavelength_values[i] - min_lam) / lam_bin)
+                star_spectra[j, lamBin, k] += star_gas_flux[i, j, k]
+
+    if plot_flag:
+        for i in range(0, num_stars):
+            plot(bin_centers, star_spectra[0, :, i])
+        show()
+
+    return star_spectra
 
 
 def make_spectrum(gas_coords, gas_flux, times, bins, plot_flag=True):
@@ -475,7 +522,7 @@ def load_star_data():
 
 ########################################################################
 # Set constants:
-num_clouds = 2000
+num_clouds = 5000
 
 # Set model parameter values:
 mu = 5.   # mean radius of emission, in units of light days
@@ -511,7 +558,7 @@ params2 = [angular_sd_orbiting, radial_sd_orbiting,
 params3 = [stellar_wind_radius, kappa]
 
 # Set properties of predicted line profiles:
-times = np.linspace(1900, 2100, 200)
+times = np.linspace(1900, 2100, 1)
 # times = np.linspace(1900, 2100, 5)
 bins = 100   # this should be equally-spaced bins in lambda
 # lambdaCen = 4861.33   # Hbeta in Angstroms
