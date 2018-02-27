@@ -9,6 +9,7 @@ from pylab import (arccos, axis, clf, copy, cos, exp, figure, hist, plot, rand,
                    savefig, scatter, show, sin, sqrt, subplot, transpose,
                    xlabel, ylabel)
 from scipy.integrate import quad
+from matplotlib import cm
 
 plt.rcParams['text.usetex'] = True
 plt.rcParams['text.latex.unicode'] = True
@@ -311,6 +312,10 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
     [spectra, wavelength_bins] = make_spectrum(gas_coords, gas_flux, times,
                                                bins, plot_flag=False)
 
+    current_star_positions = star_position(star_pos_models, 2018.0)
+    current_star_distances = [
+        np.linalg.norm(x) for x in current_star_positions]
+
     # loop over times we want spectra
     for i in range(np.size(times)):
         if plot_flag:
@@ -363,13 +368,28 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
             ahpl.relim()
             ahpl.autoscale_view(True, True, True)
 
-            sline.set_data(wavelength_bins, spectra[i])
-            minx = np.min(wavelength_bins)
-            maxx = np.max(wavelength_bins)
-            miny = np.min(spectra[i])
-            maxy = np.max(spectra[i])
-            sppl.set_xlim(minx, maxx)
-            sppl.set_ylim(miny, maxy)
+            # sline.set_data(wavelength_bins, spectra[i])
+            # minx = np.min(wavelength_bins)
+            # maxx = np.max(wavelength_bins)
+            # miny = np.min(spectra[i])
+            # maxy = np.max(spectra[i])
+            # sppl.set_xlim(minx, maxx)
+            # sppl.set_ylim(miny, maxy)
+
+            sppl.cla()
+            aspectra = np.add.accumulate(spectra[i], axis=1)
+            js = np.argsort(current_star_distances)
+            for j in range(len(aspectra) - 1):
+                col = cm.gist_rainbow(
+                    np.round((255.0 * js[j]) / (len(aspectra) - 1)))
+                sppl.plot(wavelength_bins, aspectra[j], color=col)
+                if j == len(aspectra) - 1:
+                    continue
+                sppl.fill_between(
+                    wavelength_bins, aspectra[j], aspectra[j + 1],
+                    facecolor=col, alpha=0.5)
+            sppl.relim()
+            sppl.autoscale_view(True, True, True)
 
             # show()
             savefig('figs/frame-{}.png'.format(str(i).zfill(3)),
