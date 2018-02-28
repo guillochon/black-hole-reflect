@@ -286,6 +286,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
                                       bins, num_stars, plot_flag=False)
     # make a light curve (integrate over wavelength) for each star
     star_lightcurve = np.sum(star_spectra[:, :, csd_js], axis=1)  # sorted by color scheme!
+    full_lightcurve = np.sum(spectra, axis=1)
 
     ###################################################################
 
@@ -335,6 +336,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
         ylabel("$\\rm Gas \\,\\,\\, Flux \\,\\,\\, (normalized)$")
 
         ahpl = subplot(2, 3, 5)   # light curve of star fluxes
+        plot(times, full_lightcurve, '-', color='k', lw=2)
         for j in range(0,num_stars):
             plot(times, star_lightcurve[:,j], '-', color=star_colors[j])
         vl = axvline(x=times[0], color='r')
@@ -554,7 +556,7 @@ num_clouds = 5000
 
 # Set model parameter values:
 mu = 5.   # mean radius of emission, in units of light days
-F = 0.2   # minimum radius of emission, in units of fraction of mu
+F = 0.05   # minimum radius of emission, in units of fraction of mu
 # Gamma distribution radial profile shape parameter, between 0.01 and 2
 beta = 0.5
 theta_i = 10.   # x-z plane inclination angle in deg, 0 deg is face-on
