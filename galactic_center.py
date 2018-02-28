@@ -1,4 +1,7 @@
 """Calculate reflected line profiles in the galactic center."""
+#import time
+#time1 = time.clock()
+#print(time1)
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy import constants as c
@@ -10,6 +13,9 @@ from pylab import (arccos, axis, clf, copy, cos, exp, figure, hist, plot, rand,
                    savefig, scatter, show, sin, sqrt, subplot, transpose,
                    xlabel, ylabel, axvline)
 from scipy.integrate import quad
+
+
+
 
 plt.rcParams['text.usetex'] = True
 plt.rcParams['text.latex.unicode'] = True
@@ -262,6 +268,10 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
     [spectra, wavelength_bins] = make_spectrum(gas_coords, gas_flux, times,
                                                bins, plot_flag=False)
 
+    #time2 = time.clock()
+    #print(time2, time2-time1)
+    #exit()
+
     current_star_positions = star_position(star_pos_models, 2018.0)
     current_star_distances = [
         np.linalg.norm(x) for x in current_star_positions]
@@ -277,7 +287,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
     # make a light curve (integrate over wavelength) for each star
     star_lightcurve = np.sum(star_spectra[:, :, csd_js], axis=1)  # sorted by color scheme!
 
-    ###################################################################3
+    ###################################################################
 
     # set up the plot first
     if plot_flag:
@@ -327,6 +337,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
         ahpl = subplot(2, 3, 5)   # light curve of star fluxes
         for j in range(0,num_stars):
             plot(times, star_lightcurve[:,j], '-', color=star_colors[j])
+        vl = axvline(x=times[0], color='r')
         xlabel("$\\rm Time \\,\\,\\, (years)$")
         ylabel("$\\rm Gas \\,\\,\\, Flux \\,\\,\\, (normalized)$")
 
@@ -388,6 +399,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
             # No `set_data` for `hist`.
             # The only reason we need to replot this is to get the colors right... change this?
             #ahpl.cla()
+            vl.set_xdata(times[i])
             #axvline(x=times[i], color='r')
             #ahpl.set_xlim(np.min(times[i]), np.max(times[i]))
             #ahpl.set_ylim(np.min(np.min(star_lightcurve, axis=0)), np.max(np.max(star_lightcurve, axis=0)))
@@ -542,7 +554,7 @@ num_clouds = 5000
 
 # Set model parameter values:
 mu = 5.   # mean radius of emission, in units of light days
-F = 0.5   # minimum radius of emission, in units of fraction of mu
+F = 0.2   # minimum radius of emission, in units of fraction of mu
 # Gamma distribution radial profile shape parameter, between 0.01 and 2
 beta = 0.5
 theta_i = 10.   # x-z plane inclination angle in deg, 0 deg is face-on
@@ -577,7 +589,7 @@ params3 = [stellar_wind_radius, kappa]
 times = np.linspace(2017, 2037, 200)
 #times = np.linspace(2017, 2057, 200)
 # times = np.linspace(1900, 2100, 200)
-bins = 100   # this should be equally-spaced bins in lambda
+bins = 60   # this should be equally-spaced bins in lambda
 # lambdaCen = 4861.33   # Hbeta in Angstroms
 lambdaCen = 12936600.0  # H30alpha in Angstroms
 
