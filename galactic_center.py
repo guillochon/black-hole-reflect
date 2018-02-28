@@ -8,7 +8,7 @@ from matplotlib import cm
 from PyAstronomy.modelSuite import KeplerEllipseModel
 from pylab import (arccos, axis, clf, copy, cos, exp, figure, hist, plot, rand,
                    savefig, scatter, show, sin, sqrt, subplot, transpose,
-                   xlabel, ylabel)
+                   xlabel, ylabel, axvline)
 from scipy.integrate import quad
 
 plt.rcParams['text.usetex'] = True
@@ -24,6 +24,8 @@ eV = (1.0 * u.eV).si.value  # electron volt
 h = c.h.si.value  # Planck's constant
 kb = c.k_B.si.value  # Boltzmann's constant
 cc = c.c.si.value  # Speed of light
+day = 86400.  # seconds in a day
+year = 3.154*10**7. # seconds in a year
 
 
 def ionizing_luminosity_fraction(temp, cutoff=13.6):
@@ -229,62 +231,6 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
     # load in the star luminosities (if they are constant)
     star_luminosities = star_luminosity(star_data)
 
-    # set up the plot first
-    if plot_flag:
-        shade = 0.5
-        min_ptsize = 1.0
-        max_ptsize = 8.0
-        ssize = 5.0
-        boxsize = 10.0
-        fig = figure(figsize=(14, 9))
-
-        # edge-on view 1, observer at +infinity of x-axis
-        axy = subplot(2, 3, 1, autoscale_on=False, aspect='equal')
-        sxy = scatter([0.0], [0.0], alpha=shade,
-                      edgecolors='black', linewidths=0.5)
-        pxy = scatter([0.0], [0.0], c='r', s=ssize ** 2,
-                      edgecolors='black', linewidths=0.5)
-        axis('equal')
-        xlabel('x')
-        ylabel('y')
-
-        # edge-on view 2, observer at +infinity of x-axis
-        axz = subplot(2, 3, 2, autoscale_on=False, aspect='equal')
-        sxz = scatter([0.0], [0.0], alpha=shade,
-                      edgecolors='black', linewidths=0.5)
-        pxz = scatter([0.0], [0.0], c='r', s=ssize ** 2,
-                      edgecolors='black', linewidths=0.5)
-        axis('equal')
-        xlabel('x')
-        ylabel('z')
-
-        # view of observer looking at plane of sky
-        ayz = subplot(2, 3, 3, autoscale_on=False, aspect='equal')
-        syz = scatter([0.0], [0.0], alpha=shade,
-                      edgecolors='black', linewidths=0.5)
-        pyz = scatter([0.0], [0.0], c='r', s=ssize ** 2,
-                      edgecolors='black', linewidths=0.5)
-        axis('equal')
-        xlabel('y')
-        ylabel('z')
-
-        avpl = subplot(2, 3, 4)   # plot the vx vs. gas flux
-        vpl = scatter([0.0], [0.0], alpha=shade, s=min_ptsize,
-                      edgecolors='black', linewidths=0.5)
-        xlabel("$v_x$ (10,000 km/s)")
-        ylabel("Gas Flux (normalized)")
-
-        ahpl = subplot(2, 3, 5)   # histogram of gas flux
-        xlabel("$v_x$ (10,000 km/s)")
-        ylabel("Gas Flux (normalized)")
-
-        sppl = subplot(2, 3, 6)   # histogram of gas flux
-        sline, = plot([0.0, 0.0])
-        xlabel("$\\lambda \\,\\,\\, (\\AA )$")
-        ylabel("$\\rm Line \\,\\,\\, Flux \\,\\,\\, (normalized)$")
-
-        fig.tight_layout()
-
     # loop over times we want spectra
     star_pos_models = [x[0] for x in star_data]
 
@@ -325,9 +271,73 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
         cm.gist_rainbow(float(j) / (len(star_data) - 1))
         for j in range(len(star_data))])
 
-    # loop over the stars to make a spectrum for each star
+    # make a spectrum for each star
     star_spectra = make_star_spectrum(gas_coords, star_gas_flux, times,
                                       bins, num_stars, plot_flag=False)
+    # make a light curve (integrate over wavelength) for each star
+    star_lightcurve = np.sum(star_spectra[:, :, csd_js], axis=1)  # sorted by color scheme!
+
+    ###################################################################3
+
+    # set up the plot first
+    if plot_flag:
+        shade = 0.5
+        min_ptsize = 1.0
+        max_ptsize = 8.0
+        ssize = 5.0
+        boxsize = 10.0
+        fig = figure(figsize=(14, 9))
+
+        # edge-on view 1, observer at +infinity of x-axis
+        axy = subplot(2, 3, 1, autoscale_on=False, aspect='equal')
+        sxy = scatter([0.0], [0.0], alpha=shade,
+                      edgecolors='black', linewidths=0.5)
+        pxy = scatter([0.0], [0.0], c='r', s=ssize ** 2,
+                      edgecolors='black', linewidths=0.5)
+        axis('equal')
+        xlabel('$x$')
+        ylabel('$y$')
+
+        # edge-on view 2, observer at +infinity of x-axis
+        axz = subplot(2, 3, 2, autoscale_on=False, aspect='equal')
+        sxz = scatter([0.0], [0.0], alpha=shade,
+                      edgecolors='black', linewidths=0.5)
+        pxz = scatter([0.0], [0.0], c='r', s=ssize ** 2,
+                      edgecolors='black', linewidths=0.5)
+        axis('equal')
+        xlabel('$x$')
+        ylabel('$z$')
+
+        # view of observer looking at plane of sky
+        ayz = subplot(2, 3, 3, autoscale_on=False, aspect='equal')
+        syz = scatter([0.0], [0.0], alpha=shade,
+                      edgecolors='black', linewidths=0.5)
+        pyz = scatter([0.0], [0.0], c='r', s=ssize ** 2,
+                      edgecolors='black', linewidths=0.5)
+        axis('equal')
+        xlabel('$y$')
+        ylabel('$z$')
+
+        avpl = subplot(2, 3, 4)   # plot the vx vs. gas flux
+        vpl = scatter([0.0], [0.0], alpha=shade, s=min_ptsize,
+                      edgecolors='black', linewidths=0.5)
+        xlabel("$v_x \\,\\,\\, {\\rm (10,000 km/s)}$")
+        ylabel("$\\rm Gas \\,\\,\\, Flux \\,\\,\\, (normalized)$")
+
+        ahpl = subplot(2, 3, 5)   # light curve of star fluxes
+        for j in range(0,num_stars):
+            plot(times, star_lightcurve[:,j], '-', color=star_colors[j])
+        xlabel("$\\rm Time \\,\\,\\, (years)$")
+        ylabel("$\\rm Gas \\,\\,\\, Flux \\,\\,\\, (normalized)$")
+
+        sppl = subplot(2, 3, 6)   # histogram of gas flux
+        sline, = plot([0.0, 0.0])
+        xlabel("$\\lambda \\,\\,\\, (\\AA )$")
+        ylabel("$\\rm Line \\,\\,\\, Flux \\,\\,\\, (normalized)$")
+
+        fig.tight_layout()
+
+
 
     # loop over times we want spectra
     for i in range(np.size(times)):
@@ -376,11 +386,15 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
             avpl.set_ylim(0, maxy)
 
             # No `set_data` for `hist`.
-            ahpl.cla()
-            hist(gas_coords[4] / 10000000., weights=gas_flux_norm,
-                 bins=int(num_clouds / 100))
-            ahpl.relim()
-            ahpl.autoscale_view(True, True, True)
+            # The only reason we need to replot this is to get the colors right... change this?
+            #ahpl.cla()
+            #axvline(x=times[i], color='r')
+            #ahpl.set_xlim(np.min(times[i]), np.max(times[i]))
+            #ahpl.set_ylim(np.min(np.min(star_lightcurve, axis=0)), np.max(np.max(star_lightcurve, axis=0)))
+            #hist(gas_coords[4] / 10000000., weights=gas_flux_norm,
+            #     bins=int(num_clouds / 100))
+            #ahpl.relim()
+            #ahpl.autoscale_view(True, True, True)
 
             # sline.set_data(wavelength_bins, spectra[i])
             # minx = np.min(wavelength_bins)
@@ -403,6 +417,8 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
                     facecolor=col, alpha=0.5)
             sppl.relim()
             sppl.autoscale_view(True, True, True)
+
+
 
             fig.canvas.draw_idle()
 
@@ -558,8 +574,9 @@ params2 = [angular_sd_orbiting, radial_sd_orbiting,
 params3 = [stellar_wind_radius, kappa]
 
 # Set properties of predicted line profiles:
-times = np.linspace(1900, 2100, 200)
-# times = np.linspace(1900, 2100, 5)
+times = np.linspace(2017, 2037, 200)
+#times = np.linspace(2017, 2057, 200)
+# times = np.linspace(1900, 2100, 200)
 bins = 100   # this should be equally-spaced bins in lambda
 # lambdaCen = 4861.33   # Hbeta in Angstroms
 lambdaCen = 12936600.0  # H30alpha in Angstroms
