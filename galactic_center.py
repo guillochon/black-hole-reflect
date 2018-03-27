@@ -53,7 +53,7 @@ def get_cmap(n, name='hsv'):
     return plt.cm.get_cmap(name, n)
 
 
-def star_position(kems, time):
+def star_position(kems, times):
     """Return the star positions for a given time."""
     # load in the star position file here:
 
@@ -68,8 +68,20 @@ def star_position(kems, time):
         rand(num_stars) * box_size - box_size / 2.,
         rand(num_stars) * box_size - box_size / 2.])) * meters
     """
+    if not isinstance(times, list):
+        time = [times]
+    else:
+        time = times
+    time = np.array(time)
+
     positions = np.array([
-        k.evaluate(np.array([time])).tolist() for k in kems]) * 1.9e14
+        k.evaluate(time).tolist() for k in kems]) * 1.9e14
+
+    rot = [[0, -1], [1, 0]]
+    positions = np.array([np.matmul(rot, pos[:2]).tolist() +
+                          [pos[2]] for pos in positions])
+
+    # rotated_positions = [rotation_transform(x) for x in positions]
 
     # print positions
     # print positions[:,0]  # all the x-coords
@@ -296,11 +308,19 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
         min_ptsize = 1.0
         max_ptsize = 8.0
         ssize = 5.0
-        boxsize = 10.0
+        boxsize = 2.0
         fig = figure(figsize=(14, 9))
 
         # edge-on view 1, observer at +infinity of x-axis
         axy = subplot(2, 3, 1, autoscale_on=False, aspect='equal')
+        for si, star in enumerate(np.array(star_data)[csd_js]):
+            print(star[1]['name'])
+            elpts = [star_position([
+                np.array(star_pos_models)[csd_js][si]], t)[
+                    0] / meters for t in np.linspace(0, star[1]['period'],
+                                                     150)]
+            plot([x[0] for x in elpts], [x[1] for x in elpts],
+                 lw=0.5, c=star_colors[si])
         sxy = scatter([0.0], [0.0], alpha=shade,
                       edgecolors='black', linewidths=0.5)
         pxy = scatter([0.0], [0.0], c='r', s=ssize ** 2,
@@ -311,6 +331,13 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
 
         # edge-on view 2, observer at +infinity of x-axis
         axz = subplot(2, 3, 2, autoscale_on=False, aspect='equal')
+        for si, star in enumerate(np.array(star_data)[csd_js]):
+            elpts = [star_position([
+                np.array(star_pos_models)[csd_js][si]], t)[
+                    0] / meters for t in np.linspace(0, star[1]['period'],
+                                                     150)]
+            plot([x[0] for x in elpts], [x[2] for x in elpts],
+                 lw=0.5, c=star_colors[si])
         sxz = scatter([0.0], [0.0], alpha=shade,
                       edgecolors='black', linewidths=0.5)
         pxz = scatter([0.0], [0.0], c='r', s=ssize ** 2,
@@ -321,6 +348,13 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
 
         # view of observer looking at plane of sky
         ayz = subplot(2, 3, 3, autoscale_on=False, aspect='equal')
+        for si, star in enumerate(np.array(star_data)[csd_js]):
+            elpts = [star_position([
+                np.array(star_pos_models)[csd_js][si]], t)[
+                    0] / meters for t in np.linspace(0, star[1]['period'],
+                                                     150)]
+            plot([x[1] for x in elpts], [x[2] for x in elpts],
+                 lw=0.5, c=star_colors[si])
         syz = scatter([0.0], [0.0], alpha=shade,
                       edgecolors='black', linewidths=0.5)
         pyz = scatter([0.0], [0.0], c='r', s=ssize ** 2,
@@ -588,7 +622,7 @@ params2 = [angular_sd_orbiting, radial_sd_orbiting,
 params3 = [stellar_wind_radius, kappa]
 
 # Set properties of predicted line profiles:
-times = np.linspace(2017, 2037, 200)
+times = np.linspace(2017, 2020, 1)
 #times = np.linspace(2017, 2057, 200)
 # times = np.linspace(1900, 2100, 200)
 bins = 60   # this should be equally-spaced bins in lambda
