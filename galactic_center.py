@@ -1,21 +1,19 @@
 """Calculate reflected line profiles in the galactic center."""
-#import time
-#time1 = time.clock()
-#print(time1)
+
+# time1 = time.clock()
+# print(time1)
 import matplotlib.pyplot as plt
+# import time
 import numpy as np
 from astropy import constants as c
 from astropy import units as u
 from astropy.table import Table
 from matplotlib import cm
 from PyAstronomy.modelSuite import KeplerEllipseModel
-from pylab import (arccos, axis, clf, copy, cos, exp, figure, hist, plot, rand,
-                   savefig, scatter, show, sin, sqrt, subplot, transpose,
-                   xlabel, ylabel, axvline)
+from pylab import (arccos, axis, axvline, clf, copy, cos, exp, figure, hist,
+                   plot, rand, savefig, scatter, show, sin, sqrt, subplot,
+                   transpose, xlabel, ylabel)
 from scipy.integrate import quad
-
-
-
 
 plt.rcParams['text.usetex'] = True
 plt.rcParams['text.latex.unicode'] = True
@@ -31,7 +29,7 @@ h = c.h.si.value  # Planck's constant
 kb = c.k_B.si.value  # Boltzmann's constant
 cc = c.c.si.value  # Speed of light
 day = 86400.  # seconds in a day
-year = 3.154*10**7. # seconds in a year
+year = 3.154 * 10**7.  # seconds in a year
 
 
 def ionizing_luminosity_fraction(temp, cutoff=13.6):
@@ -122,7 +120,7 @@ def rotate(x, y, co, si):
 
 def gas_model(num_clouds, params, other_params, lambdaCen, plot_flag=True):
     """Retrieve the gas positions and velocities."""
-    [mu, F, beta, theta_i, theta_i2, theta_o,
+    [mu, F, beta, theta_i, theta_i2, theta_i3, theta_o,
      kappa, mbh, f_ellip, f_flow, theta_e] = params
     [angular_sd_orbiting, radial_sd_orbiting,
         angular_sd_flowing, radial_sd_flowing] = other_params
@@ -149,6 +147,8 @@ def gas_model(num_clouds, params, other_params, lambdaCen, plot_flag=True):
     sin3 = sin(0.5 * np.pi - theta_i)
     cos4 = cos(0.5 * np.pi - theta_i2)
     sin4 = sin(0.5 * np.pi - theta_i2)
+    cos5 = cos(0.5 * np.pi - theta_i3)
+    sin5 = sin(0.5 * np.pi - theta_i3)
 
     # rotate to puff up:
     [x, z] = rotate(x, z, cos1, sin1)
@@ -158,6 +158,8 @@ def gas_model(num_clouds, params, other_params, lambdaCen, plot_flag=True):
     [x, z] = rotate(x, z, cos3, sin3)
     # rotate to apply second inclination angle:
     [x, y] = rotate(x, y, cos4, sin4)
+    # rotate to apply second inclination angle:
+    [y, z] = rotate(y, z, cos5, sin5)
 
     # weights for the different points
     # w = 0.5 + kappa * x / sqrt(x * x + y * y + z * z)
@@ -231,12 +233,15 @@ def gas_model(num_clouds, params, other_params, lambdaCen, plot_flag=True):
     # rotate to apply second inclination angle:
     [vx, vy] = rotate(vx, vy, cos4, sin4)
 
-    wavelength_values = relativity(vx, r, Rs, lambdaCen)
+    # Sign of vz depends on whether disk is co- or counter-rotating.
+    # Positive vz corresponds to counter-clockwise rotation about the +y axis.
+    wavelength_values = relativity(vz, r, Rs, lambdaCen)
 
     return [x, y, z, vx, vy, vz, wavelength_values]
 
 
-def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True):
+def compute_gas_flux(gas_coords, star_data, times, params, bins,
+                     plot_flag=True):
     """Calculate the flux contribution from each point particle.
 
     Assumptions: light travel time from stars to gas plus the
@@ -245,7 +250,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
     """
     [stellar_wind_radius, kappa] = params
 
-    #gas_flux = np.zeros((np.size(gas_coords[0]), np.size(times)))
+    # gas_flux = np.zeros((np.size(gas_coords[0]), np.size(times)))
     # load in the star luminosities (if they are constant)
     star_luminosities = star_luminosity(star_data)
 
@@ -280,9 +285,9 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
     [spectra, wavelength_bins] = make_spectrum(gas_coords, gas_flux, times,
                                                bins, plot_flag=False)
 
-    #time2 = time.clock()
-    #print(time2, time2-time1)
-    #exit()
+    # time2 = time.clock()
+    # print(time2, time2-time1)
+    # exit()
 
     current_star_positions = star_position(star_pos_models, 2018.0)
     current_star_distances = [
@@ -297,7 +302,8 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
     star_spectra = make_star_spectrum(gas_coords, star_gas_flux, times,
                                       bins, num_stars, plot_flag=False)
     # make a light curve (integrate over wavelength) for each star
-    star_lightcurve = np.sum(star_spectra[:, :, csd_js], axis=1)  # sorted by color scheme!
+    # sorted by color scheme!
+    star_lightcurve = np.sum(star_spectra[:, :, csd_js], axis=1)
     full_lightcurve = np.sum(spectra, axis=1)
 
     ###################################################################
@@ -314,7 +320,6 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
         # edge-on view 1, observer at +infinity of x-axis
         axy = subplot(2, 3, 1, autoscale_on=False, aspect='equal')
         for si, star in enumerate(np.array(star_data)[csd_js]):
-            print(star[1]['name'])
             elpts = [star_position([
                 np.array(star_pos_models)[csd_js][si]], t)[
                     0] / meters for t in np.linspace(0, star[1]['period'],
@@ -371,8 +376,8 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
 
         ahpl = subplot(2, 3, 5)   # light curve of star fluxes
         plot(times, full_lightcurve, '-', color='k', lw=2)
-        for j in range(0,num_stars):
-            plot(times, star_lightcurve[:,j], '-', color=star_colors[j])
+        for j in range(0, num_stars):
+            plot(times, star_lightcurve[:, j], '-', color=star_colors[j])
         vl = axvline(x=times[0], color='r')
         xlabel("$\\rm Time \\,\\,\\, (years)$")
         ylabel("$\\rm Gas \\,\\,\\, Flux \\,\\,\\, (normalized)$")
@@ -383,8 +388,6 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
         ylabel("$\\rm Line \\,\\,\\, Flux \\,\\,\\, (normalized)$")
 
         fig.tight_layout()
-
-
 
     # loop over times we want spectra
     for i in range(np.size(times)):
@@ -432,17 +435,18 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
             avpl.set_xlim(-maxx, maxx)
             avpl.set_ylim(0, maxy)
 
-            # No `set_data` for `hist`.
-            # The only reason we need to replot this is to get the colors right... change this?
-            #ahpl.cla()
+            # No `set_data` for `hist`. The only reason we need to replot this
+            # is to get the colors right... change this?
+            # ahpl.cla()
             vl.set_xdata(times[i])
-            #axvline(x=times[i], color='r')
-            #ahpl.set_xlim(np.min(times[i]), np.max(times[i]))
-            #ahpl.set_ylim(np.min(np.min(star_lightcurve, axis=0)), np.max(np.max(star_lightcurve, axis=0)))
-            #hist(gas_coords[4] / 10000000., weights=gas_flux_norm,
+            # axvline(x=times[i], color='r')
+            # ahpl.set_xlim(np.min(times[i]), np.max(times[i]))
+            # ahpl.set_ylim(np.min(np.min(star_lightcurve, axis=0)),
+            #               np.max(np.max(star_lightcurve, axis=0)))
+            # hist(gas_coords[4] / 10000000., weights=gas_flux_norm,
             #     bins=int(num_clouds / 100))
-            #ahpl.relim()
-            #ahpl.autoscale_view(True, True, True)
+            # ahpl.relim()
+            # ahpl.autoscale_view(True, True, True)
 
             # sline.set_data(wavelength_bins, spectra[i])
             # minx = np.min(wavelength_bins)
@@ -466,8 +470,6 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
             sppl.relim()
             sppl.autoscale_view(True, True, True)
 
-
-
             fig.canvas.draw_idle()
 
             # show()
@@ -477,22 +479,24 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, plot_flag=True)
     return gas_flux
 
 
-def make_star_spectrum(gas_coords, star_gas_flux, times, bins, num_stars, plot_flag=True):
+def make_star_spectrum(gas_coords, star_gas_flux, times, bins, num_stars,
+                       plot_flag=True):
     """Make a spectrum for each time.
 
     You specify the number of bins at initiation and then the code
     figures out what the maximum and minimum bin should be
     """
-    #star_gas_flux = np.zeros((np.size(gas_coords[0]), np.size(times), num_stars))
+    # star_gas_flux = np.zeros((np.size(gas_coords[0]), np.size(times),
+    #                           num_stars))
     [x, y, z, vx, vy, vz, wavelength_values] = gas_coords
 
     star_spectra = np.zeros((np.size(times), int(bins), num_stars))
     min_lam = min(wavelength_values)
     max_lam = max(wavelength_values)
-    lam_range = max_lam - min_lam
+    # lam_range = max_lam - min_lam
     bin_centers = np.linspace(min_lam, max_lam, bins)
     lam_bin = bin_centers[1] - bin_centers[0]
-    lam_left = bin_centers - lam_bin / 2.
+    # lam_left = bin_centers - lam_bin / 2.
 
     # loop over the point particles for each star to put them in bins:
     for k in range(0, num_stars):
@@ -520,10 +524,10 @@ def make_spectrum(gas_coords, gas_flux, times, bins, plot_flag=True):
     spectra = np.zeros((np.size(times), int(bins)))
     min_lam = min(wavelength_values)
     max_lam = max(wavelength_values)
-    lam_range = max_lam - min_lam
+    # lam_range = max_lam - min_lam
     bin_centers = np.linspace(min_lam, max_lam, bins)
     lam_bin = bin_centers[1] - bin_centers[0]
-    lam_left = bin_centers - lam_bin / 2.
+    # lam_left = bin_centers - lam_bin / 2.
 
     # loop over the point particles to put them in bins:
     for j in range(0, np.size(times)):
@@ -540,8 +544,12 @@ def make_spectrum(gas_coords, gas_flux, times, bins, plot_flag=True):
 
 
 def relativity(vx, r, Rs, lambdaCen):
-    # Calculate the wavelength expected for each velocity using the following SR/GR:
-    # Go from vx to wavelength using SR doppler shift, then add GR grav. z
+    """
+    Calculate the wavelength expected for each velocity.
+
+    Using the following SR/GR:
+    Go from vx to wavelength using SR doppler shift, then add GR grav. z
+    """
     # SR radial velocity redshift
     factor1 = sqrt((1. - vx / cc) / (1. + vx / cc))
     # GR gravitational redshift
@@ -593,8 +601,9 @@ mu = 5.   # mean radius of emission, in units of light days
 F = 0.05   # minimum radius of emission, in units of fraction of mu
 # Gamma distribution radial profile shape parameter, between 0.01 and 2
 beta = 0.5
-theta_i = 10.   # x-z plane inclination angle in deg, 0 deg is face-on
-theta_i2 = 60.  # x-y plane inclination angle in deg, 0 deg is face-on
+theta_i = 0.   # x-z plane inclination angle in deg, 0 deg is face-on
+theta_i2 = 0.  # x-y plane inclination angle in deg, 0 deg is face-on
+theta_i3 = 90.  # y-z plane inclination angle in deg, 0 deg is face-on
 # opening angle of disk in deg, 0 deg is thin disk, 90 deg is sphere
 theta_o = 5.
 # -0.5 emit back to center, 0 = isotropic emission, 0.5 emit away from center
@@ -614,7 +623,8 @@ radial_sd_flowing = 0.01
 
 stellar_wind_radius = 0.5   # light days, radius of exclusion for line emission
 
-params = [mu * meters, F, beta, theta_i * radians, theta_i2 * radians,
+params = [mu * meters, F, beta, theta_i * radians,
+          theta_i2 * radians, theta_i3 * radians,
           theta_o * radians, kappa,
           kg * 10**log_mbh, f_ellip, f_flow, theta_e]  # work in SI units
 params2 = [angular_sd_orbiting, radial_sd_orbiting,
@@ -623,7 +633,7 @@ params3 = [stellar_wind_radius, kappa]
 
 # Set properties of predicted line profiles:
 times = np.linspace(2017, 2020, 1)
-#times = np.linspace(2017, 2057, 200)
+# times = np.linspace(2017, 2057, 200)
 # times = np.linspace(1900, 2100, 200)
 bins = 60   # this should be equally-spaced bins in lambda
 # lambdaCen = 4861.33   # Hbeta in Angstroms
