@@ -1,21 +1,20 @@
 """Calculate reflected line profiles in the galactic center."""
 
-# time1 = time.clock()
-# print(time1)
+import fractions
+
 import matplotlib.pyplot as plt
-# import time
 import numpy as np
 from astropy import constants as c
 from astropy import units as u
 from astropy.table import Table
 from matplotlib import cm
-import fractions
-from PyAstronomy.modelSuite import KeplerEllipseModel
-from pylab import (arccos, axis, clf, copy, cos, exp, figure, hist,
-                   plot, rand, savefig, scatter, show, sin, sqrt, subplot,
-                   transpose, xlabel, ylabel)
-from scipy.integrate import quad
 from matplotlib.gridspec import GridSpec
+from PyAstronomy.modelSuite import KeplerEllipseModel
+from pylab import (arccos, axis, clf, copy, cos, exp, figure, hist, plot, rand,
+                   savefig, scatter, show, sin, sqrt, subplot, transpose,
+                   xlabel, ylabel)
+from pyquaternion import Quaternion
+from scipy.integrate import quad
 
 plt.rcParams['text.usetex'] = True
 plt.rcParams['text.latex.unicode'] = True
@@ -131,6 +130,35 @@ def rotate(x, y, co, si):
     return [xx, yy]
 
 
+def rotate_vecs(u, o, v, transpose=False):
+    """Rotate vector u to the direction of vector v."""
+    rots = []
+    if isinstance(u[0], (int, float)):
+        ui = [u]
+    else:
+        ui = u
+
+    if transpose:
+        ui = list(map(list, zip(*ui)))
+
+    a = np.cross(o, v)
+    angle = 1.0 + np.dot(o, v)
+    qrot = Quaternion(axis=a, angle=angle)
+    # qrot = Quaternion(
+    #     axis=a, radians=np.dot(o, v) + qrot.magnitude)
+    denom = np.array(o) + np.array(v)
+    denom = np.linalg.norm(denom)
+    qrot /= denom
+
+    for uu in ui:
+        rots.append(qrot.rotate(uu))
+
+    if transpose:
+        rots = list(map(list, zip(*rots)))
+
+    return tuple(rots)
+
+
 def gas_model(num_clouds, params, other_params, lambdaCen, plot_flag=True):
     """Retrieve the gas positions and velocities."""
     [mu, F, beta, theta_i, theta_i2, theta_i3, theta_o,
@@ -156,23 +184,14 @@ def gas_model(num_clouds, params, other_params, lambdaCen, plot_flag=True):
     u1 = rand(num_clouds)
     cos2 = cos(2. * np.pi * u1)
     sin2 = sin(2. * np.pi * u1)
-    cos3 = cos(0.5 * np.pi - theta_i)
-    sin3 = sin(0.5 * np.pi - theta_i)
-    cos4 = cos(0.5 * np.pi - theta_i2)
-    sin4 = sin(0.5 * np.pi - theta_i2)
-    cos5 = cos(0.5 * np.pi - theta_i3)
-    sin5 = sin(0.5 * np.pi - theta_i3)
 
     # rotate to puff up:
     [x, z] = rotate(x, z, cos1, sin1)
     # rotate to restore axisymmetry:
     [x, y] = rotate(x, y, cos2, sin2)
-    # rotate to apply inclination angle:
-    [x, z] = rotate(x, z, cos3, sin3)
-    # rotate to apply second inclination angle:
-    [x, y] = rotate(x, y, cos4, sin4)
-    # rotate to apply second inclination angle:
-    [y, z] = rotate(y, z, cos5, sin5)
+
+    # rotate to observer plane:
+    x, y, z = rotate_vecs([x, y, z], [0, 0, 1], [1, 0, 0], transpose=True)
 
     # weights for the different points
     # w = 0.5 + kappa * x / sqrt(x * x + y * y + z * z)
@@ -237,14 +256,12 @@ def gas_model(num_clouds, params, other_params, lambdaCen, plot_flag=True):
     vy = vr * sin(phi) + vphi * cos(phi)
     vz = vr * 0.
 
-    # rotate to puff up:
-    [vx, vz] = rotate(vx, vz, cos1, sin1)
-    # rotate to restore axisymmetry:
-    [vx, vy] = rotate(vx, vy, cos2, sin2)
-    # rotate to apply inclination angle:
-    [vx, vz] = rotate(vx, vz, cos3, sin3)
     # rotate to apply second inclination angle:
-    [vx, vy] = rotate(vx, vy, cos4, sin4)
+    vx, vy, vz = rotate_vecs(
+        [vx, vy, vz], [0, 0, 1], [1, 0, 0], transpose=True)
+    vx = np.array(vx)
+    vy = np.array(vy)
+    vz = np.array(vz)
 
     # Sign of vz depends on whether disk is co- or counter-rotating.
     # Positive vz corresponds to counter-clockwise rotation about the +y axis.
@@ -307,9 +324,9 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins,
         np.linalg.norm(x) for x in current_star_positions]
     csd_js = np.argsort(current_star_distances)
 
-    star_colors = np.flip(np.array([
-        cm.plasma(float(j) / (len(star_data) - 1))
-        for j in range(len(star_data))]), 0)
+    star_colors = np.array([
+        cm.plasma(2.0 * float(j) / (len(star_data) - 1))
+        for j in range(len(star_data))])
 
     # make a spectrum for each star
     star_spectra = make_star_spectrum(gas_coords, star_gas_flux, times,
@@ -395,13 +412,13 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins,
         # ylabel("$\\rm Gas \\,\\,\\, Flux \\,\\,\\, (normalized)$")
 
         ahpl = subplot(gs[2, :])   # light curve of star fluxes
-        plot(times, np.log10(full_lightcurve), '-', color='k', lw=2)
+        plot(times, np.log10(full_lightcurve), '--', color='k', lw=2)
         for j in range(0, num_stars):
             plot(times, np.log10(star_lightcurve[:, j]), '-',
                  color=star_colors[j])
         # vl = axvline(x=times[0], color='r')
         ahpl.set_xlim(np.min(selected_times), np.max(selected_times))
-        ahpl.set_ylim(-3, 0.2)
+        ahpl.set_ylim(-2, 0.2)
         xlabel("$\\rm Time \\,\\,\\, (years)$")
         ylabel("$\\rm Gas \\,\\,\\, Flux \\,\\,\\, (normalized)$")
 
@@ -419,7 +436,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins,
     # loop over times we want spectra
     mid_i = int(np.floor(len(selected_is) / 2.0))
     if plot_flag:
-        i = mid_i
+        i = selected_is[mid_i]
         star_positions = star_position(star_pos_models, times[i])
         # larger points correspond to more emission from the point
         gas_flux_norm = gas_flux[:, i] / sum(gas_flux[:, i])
@@ -435,6 +452,9 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins,
         pxy.set_facecolors(star_colors)
         axy.set_xlim(-boxsize, boxsize)
         axy.set_ylim(-boxsize, boxsize)
+        for xi, xxyy in enumerate(xy):
+            axy.text(xxyy[0] + 0.05 * boxsize, xxyy[1] + 0.05 * boxsize,
+                     star_data[xi][1]['name'], clip_on=True)
 
         xz = transpose(np.array(gas_coords[:3:2]) / meters)
         sxz.set_sizes(ptsizes)
@@ -444,6 +464,9 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins,
         pxz.set_facecolors(star_colors)
         axz.set_xlim(-boxsize, boxsize)
         axz.set_ylim(-boxsize, boxsize)
+        for xi, xxzz in enumerate(xz):
+            axz.text(xxzz[0] + 0.05 * boxsize, xxzz[1] + 0.05 * boxsize,
+                     star_data[xi][1]['name'], clip_on=True)
 
         # yz = transpose(np.array(gas_coords[1:3]) / meters)
         # syz.set_sizes(ptsizes)
@@ -494,9 +517,14 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins,
                     wavelength_bins,
                     aspectra[j - 1] if j > 0 else 0, aspectra[j],
                     facecolor=col, alpha=0.5)
+            sppl[tii].plot(
+                wavelength_bins, aspectra[
+                    len(aspectra) - 1], color='k', lw=1)
             sppl[tii].relim()
             sppl[tii].set_ylim(bottom=0)
             sppl[tii].autoscale_view(True, True, True)
+            sppl[tii].text(0.1, 0.8, '${\\rm ' + str(int(np.round(
+                selected_times[tii]))) + '}$', transform=sppl[tii].transAxes)
 
             fig.canvas.draw_idle()
 
@@ -629,7 +657,7 @@ num_clouds = 5000
 mu = 2.   # mean radius of emission, in units of light days
 F = 0.025   # minimum radius of emission, in units of fraction of mu
 # Gamma distribution radial profile shape parameter, between 0.01 and 2
-beta = 1.0
+beta = 0.5
 theta_i = 0.   # x-z plane inclination angle in deg, 0 deg is face-on
 theta_i2 = 0.  # x-y plane inclination angle in deg, 0 deg is face-on
 theta_i3 = 90.  # y-z plane inclination angle in deg, 0 deg is face-on
