@@ -9,11 +9,13 @@ from astropy import constants as c
 from astropy import units as u
 from astropy.table import Table
 from matplotlib import cm
+import fractions
 from PyAstronomy.modelSuite import KeplerEllipseModel
-from pylab import (arccos, axis, axvline, clf, copy, cos, exp, figure, hist,
+from pylab import (arccos, axis, clf, copy, cos, exp, figure, hist,
                    plot, rand, savefig, scatter, show, sin, sqrt, subplot,
                    transpose, xlabel, ylabel)
 from scipy.integrate import quad
+from matplotlib.gridspec import GridSpec
 
 plt.rcParams['text.usetex'] = True
 plt.rcParams['text.latex.unicode'] = True
@@ -41,6 +43,17 @@ def ionizing_luminosity_fraction(temp, cutoff=13.6):
             h * nu / (kb * temp))), nulow, nuhi)[0] / (
                 2 * (np.pi * kb * temp) ** 4 / (15 * h ** 3 * cc ** 2))
     return value
+
+
+def find_nearest_idx(array, value):
+    """Find nearest value."""
+    idx = (np.abs(array - value)).argmin()
+    return idx
+
+
+def lcm(a, b):
+    """Lowest common multiple."""
+    return int(np.round(abs(a * b) / fractions.gcd(a, b))) if a and b else 0
 
 
 def get_cmap(n, name='hsv'):
@@ -294,9 +307,9 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins,
         np.linalg.norm(x) for x in current_star_positions]
     csd_js = np.argsort(current_star_distances)
 
-    star_colors = np.array([
-        cm.gist_rainbow(float(j) / (len(star_data) - 1))
-        for j in range(len(star_data))])
+    star_colors = np.flip(np.array([
+        cm.plasma(float(j) / (len(star_data) - 1))
+        for j in range(len(star_data))]), 0)
 
     # make a spectrum for each star
     star_spectra = make_star_spectrum(gas_coords, star_gas_flux, times,
@@ -305,6 +318,10 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins,
     # sorted by color scheme!
     star_lightcurve = np.sum(star_spectra[:, :, csd_js], axis=1)
     full_lightcurve = np.sum(spectra, axis=1)
+
+    # normalize
+    star_lightcurve /= np.max(full_lightcurve)
+    full_lightcurve /= np.max(full_lightcurve)
 
     ###################################################################
 
@@ -315,15 +332,18 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins,
         max_ptsize = 8.0
         ssize = 5.0
         boxsize = 2.0
-        fig = figure(figsize=(14, 9))
+        fig = figure(figsize=(9, 9), facecolor='white')
+        grid_width = lcm(2, len(selected_times))
+        h_width = int(np.round(grid_width / len(selected_times)))
+        gs = GridSpec(4, grid_width)
 
         # edge-on view 1, observer at +infinity of x-axis
-        axy = subplot(2, 3, 1, autoscale_on=False, aspect='equal')
+        axy = subplot(gs[:2, :3], autoscale_on=False, aspect='equal')
         for si, star in enumerate(np.array(star_data)[csd_js]):
             elpts = [star_position([
                 np.array(star_pos_models)[csd_js][si]], t)[
                     0] / meters for t in np.linspace(0, star[1]['period'],
-                                                     150)]
+                                                     400)]
             plot([x[0] for x in elpts], [x[1] for x in elpts],
                  lw=0.5, c=star_colors[si])
         sxy = scatter([0.0], [0.0], alpha=shade,
@@ -335,7 +355,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins,
         ylabel('$y$')
 
         # edge-on view 2, observer at +infinity of x-axis
-        axz = subplot(2, 3, 2, autoscale_on=False, aspect='equal')
+        axz = subplot(gs[:2, 3:], autoscale_on=False, aspect='equal')
         for si, star in enumerate(np.array(star_data)[csd_js]):
             elpts = [star_position([
                 np.array(star_pos_models)[csd_js][si]], t)[
@@ -352,129 +372,138 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins,
         ylabel('$z$')
 
         # view of observer looking at plane of sky
-        ayz = subplot(2, 3, 3, autoscale_on=False, aspect='equal')
-        for si, star in enumerate(np.array(star_data)[csd_js]):
-            elpts = [star_position([
-                np.array(star_pos_models)[csd_js][si]], t)[
-                    0] / meters for t in np.linspace(0, star[1]['period'],
-                                                     150)]
-            plot([x[1] for x in elpts], [x[2] for x in elpts],
-                 lw=0.5, c=star_colors[si])
-        syz = scatter([0.0], [0.0], alpha=shade,
-                      edgecolors='black', linewidths=0.5)
-        pyz = scatter([0.0], [0.0], c='r', s=ssize ** 2,
-                      edgecolors='black', linewidths=0.5)
-        axis('equal')
-        xlabel('$y$')
-        ylabel('$z$')
+        # ayz = subplot(2, 3, 3, autoscale_on=False, aspect='equal')
+        # for si, star in enumerate(np.array(star_data)[csd_js]):
+        #     elpts = [star_position([
+        #         np.array(star_pos_models)[csd_js][si]], t)[
+        #             0] / meters for t in np.linspace(0, star[1]['period'],
+        #                                              150)]
+        #     plot([x[1] for x in elpts], [x[2] for x in elpts],
+        #          lw=0.5, c=star_colors[si])
+        # syz = scatter([0.0], [0.0], alpha=shade,
+        #               edgecolors='black', linewidths=0.5)
+        # pyz = scatter([0.0], [0.0], c='r', s=ssize ** 2,
+        #               edgecolors='black', linewidths=0.5)
+        # axis('equal')
+        # xlabel('$y$')
+        # ylabel('$z$')
 
-        avpl = subplot(2, 3, 4)   # plot the vx vs. gas flux
-        vpl = scatter([0.0], [0.0], alpha=shade, s=min_ptsize,
-                      edgecolors='black', linewidths=0.5)
-        xlabel("$v_x \\,\\,\\, {\\rm (10,000 km/s)}$")
-        ylabel("$\\rm Gas \\,\\,\\, Flux \\,\\,\\, (normalized)$")
+        # avpl = subplot(2, 3, 4)   # plot the vx vs. gas flux
+        # vpl = scatter([0.0], [0.0], alpha=shade, s=min_ptsize,
+        #               edgecolors='black', linewidths=0.5)
+        # xlabel("$v_x \\,\\,\\, {\\rm (10,000 km/s)}$")
+        # ylabel("$\\rm Gas \\,\\,\\, Flux \\,\\,\\, (normalized)$")
 
-        ahpl = subplot(2, 3, 5)   # light curve of star fluxes
-        plot(times, full_lightcurve, '-', color='k', lw=2)
+        ahpl = subplot(gs[2, :])   # light curve of star fluxes
+        plot(times, np.log10(full_lightcurve), '-', color='k', lw=2)
         for j in range(0, num_stars):
-            plot(times, star_lightcurve[:, j], '-', color=star_colors[j])
-        vl = axvline(x=times[0], color='r')
+            plot(times, np.log10(star_lightcurve[:, j]), '-',
+                 color=star_colors[j])
+        # vl = axvline(x=times[0], color='r')
+        ahpl.set_xlim(np.min(selected_times), np.max(selected_times))
+        ahpl.set_ylim(-3, 0.2)
         xlabel("$\\rm Time \\,\\,\\, (years)$")
         ylabel("$\\rm Gas \\,\\,\\, Flux \\,\\,\\, (normalized)$")
 
-        sppl = subplot(2, 3, 6)   # histogram of gas flux
-        sline, = plot([0.0, 0.0])
-        xlabel("$\\lambda \\,\\,\\, (\\AA )$")
-        ylabel("$\\rm Line \\,\\,\\, Flux \\,\\,\\, (normalized)$")
+        sppl = np.empty(len(selected_is), dtype=object)
+        for i in range(len(sppl)):
+            sppl[i] = subplot(
+                gs[3, (i * h_width):(
+                    (i + 1) * h_width)])   # histogram of gas flux
+            sline, = plot([0.0, 0.0])
+            xlabel("$\\lambda \\,\\,\\, (\\AA )$")
+            ylabel("$\\rm Line \\,\\,\\, Flux \\,\\,\\, (normalized)$")
 
         fig.tight_layout()
 
     # loop over times we want spectra
-    for i in range(np.size(times)):
-        if plot_flag:
-            star_positions = star_position(star_pos_models, times[i])
-            # larger points correspond to more emission from the point
-            gas_flux_norm = gas_flux[:, i] / sum(gas_flux[:, i])
-            ptsizes = 2 * num_clouds * gas_flux_norm ** 2
-            ptsizes = min_ptsize ** 2 + (max_ptsize ** 2 - min_ptsize ** 2) * (
-                ptsizes - min(ptsizes)) / (max(ptsizes) - min(ptsizes))
+    mid_i = int(np.floor(len(selected_is) / 2.0))
+    if plot_flag:
+        i = mid_i
+        star_positions = star_position(star_pos_models, times[i])
+        # larger points correspond to more emission from the point
+        gas_flux_norm = gas_flux[:, i] / sum(gas_flux[:, i])
+        ptsizes = 2 * num_clouds * gas_flux_norm ** 2
+        ptsizes = min_ptsize ** 2 + (max_ptsize ** 2 - min_ptsize ** 2) * (
+            ptsizes - min(ptsizes)) / (max(ptsizes) - min(ptsizes))
 
-            xy = transpose(np.array(gas_coords[:2]) / meters)
-            sxy.set_sizes(ptsizes)
-            sxy.set_offsets(xy)
-            xy = star_positions[csd_js, :2] / meters
-            pxy.set_offsets(xy)
-            pxy.set_facecolors(star_colors)
-            axy.set_xlim(-boxsize, boxsize)
-            axy.set_ylim(-boxsize, boxsize)
+        xy = transpose(np.array(gas_coords[:2]) / meters)
+        sxy.set_sizes(ptsizes)
+        sxy.set_offsets(xy)
+        xy = star_positions[csd_js, :2] / meters
+        pxy.set_offsets(xy)
+        pxy.set_facecolors(star_colors)
+        axy.set_xlim(-boxsize, boxsize)
+        axy.set_ylim(-boxsize, boxsize)
 
-            xz = transpose(np.array(gas_coords[:3:2]) / meters)
-            sxz.set_sizes(ptsizes)
-            sxz.set_offsets(xz)
-            xz = star_positions[csd_js, :3:2] / meters
-            pxz.set_offsets(xz)
-            pxz.set_facecolors(star_colors)
-            axz.set_xlim(-boxsize, boxsize)
-            axz.set_ylim(-boxsize, boxsize)
+        xz = transpose(np.array(gas_coords[:3:2]) / meters)
+        sxz.set_sizes(ptsizes)
+        sxz.set_offsets(xz)
+        xz = star_positions[csd_js, :3:2] / meters
+        pxz.set_offsets(xz)
+        pxz.set_facecolors(star_colors)
+        axz.set_xlim(-boxsize, boxsize)
+        axz.set_ylim(-boxsize, boxsize)
 
-            yz = transpose(np.array(gas_coords[1:3]) / meters)
-            syz.set_sizes(ptsizes)
-            syz.set_offsets(yz)
-            yz = star_positions[csd_js, 1:3] / meters
-            pyz.set_offsets(yz)
-            pyz.set_facecolors(star_colors)
-            ayz.set_xlim(-boxsize, boxsize)
-            ayz.set_ylim(-boxsize, boxsize)
+        # yz = transpose(np.array(gas_coords[1:3]) / meters)
+        # syz.set_sizes(ptsizes)
+        # syz.set_offsets(yz)
+        # yz = star_positions[csd_js, 1:3] / meters
+        # pyz.set_offsets(yz)
+        # pyz.set_facecolors(star_colors)
+        # ayz.set_xlim(-boxsize, boxsize)
+        # ayz.set_ylim(-boxsize, boxsize)
 
-            vx = transpose(
-                np.array([gas_coords[4] / 10000000.,
-                          gas_flux_norm * 1000.]))
-            vpl.set_offsets(vx)
-            maxx = np.max(np.abs(vx[:, 0]))
-            maxy = np.max(vx[:, 1])
-            avpl.set_xlim(-maxx, maxx)
-            avpl.set_ylim(0, maxy)
+        # vx = transpose(
+        #     np.array([gas_coords[4] / 10000000.,
+        #               gas_flux_norm * 1000.]))
+        # vpl.set_offsets(vx)
+        # maxx = np.max(np.abs(vx[:, 0]))
+        # maxy = np.max(vx[:, 1])
+        # avpl.set_xlim(-maxx, maxx)
+        # avpl.set_ylim(0, maxy)
 
-            # No `set_data` for `hist`. The only reason we need to replot this
-            # is to get the colors right... change this?
-            # ahpl.cla()
-            vl.set_xdata(times[i])
-            # axvline(x=times[i], color='r')
-            # ahpl.set_xlim(np.min(times[i]), np.max(times[i]))
-            # ahpl.set_ylim(np.min(np.min(star_lightcurve, axis=0)),
-            #               np.max(np.max(star_lightcurve, axis=0)))
-            # hist(gas_coords[4] / 10000000., weights=gas_flux_norm,
-            #     bins=int(num_clouds / 100))
-            # ahpl.relim()
-            # ahpl.autoscale_view(True, True, True)
+        # No `set_data` for `hist`. The only reason we need to replot this
+        # is to get the colors right... change this?
+        # ahpl.cla()
+        # vl.set_xdata(times[i])
+        # axvline(x=times[i], color='r')
+        # hist(gas_coords[4] / 10000000., weights=gas_flux_norm,
+        #      bins=int(num_clouds / 100))
+        # ahpl.relim()
+        # ahpl.autoscale_view(True, True, True)
 
-            # sline.set_data(wavelength_bins, spectra[i])
-            # minx = np.min(wavelength_bins)
-            # maxx = np.max(wavelength_bins)
-            # miny = np.min(spectra[i])
-            # maxy = np.max(spectra[i])
-            # sppl.set_xlim(minx, maxx)
-            # sppl.set_ylim(miny, maxy)
+        # sline.set_data(wavelength_bins, spectra[i])
+        # minx = np.min(wavelength_bins)
+        # maxx = np.max(wavelength_bins)
+        # miny = np.min(spectra[i])
+        # maxy = np.max(spectra[i])
+        # sppl.set_xlim(minx, maxx)
+        # sppl.set_ylim(miny, maxy)
 
-            sppl.cla()
+        for tii, i in enumerate(selected_is):
+            sppl[tii].cla()
             aspectra = star_spectra[i, :, csd_js]
             aspectra = np.add.accumulate(aspectra, axis=0)
+            aspectra /= np.max(aspectra)
             for j in range(len(aspectra) - 1):
                 col = star_colors[j]
-                sppl.plot(
+                sppl[tii].plot(
                     wavelength_bins, aspectra[j], color=col, lw=0.5)
-                sppl.fill_between(
+                sppl[tii].fill_between(
                     wavelength_bins,
                     aspectra[j - 1] if j > 0 else 0, aspectra[j],
                     facecolor=col, alpha=0.5)
-            sppl.relim()
-            sppl.autoscale_view(True, True, True)
+            sppl[tii].relim()
+            sppl[tii].set_ylim(bottom=0)
+            sppl[tii].autoscale_view(True, True, True)
 
             fig.canvas.draw_idle()
 
-            # show()
-            savefig('figs/frame-{}.png'.format(str(i).zfill(3)),
-                    transparent=True, bbox_inches='tight', dpi=2 * 72)
+        # show()
+        savefig('figs/summary.png'.format(str(i).zfill(3)),
+                transparent=True, bbox_inches='tight', dpi=2 * 72,
+                facecolor=fig.get_facecolor())
 
     return gas_flux
 
@@ -597,15 +626,15 @@ def load_star_data():
 num_clouds = 5000
 
 # Set model parameter values:
-mu = 5.   # mean radius of emission, in units of light days
-F = 0.05   # minimum radius of emission, in units of fraction of mu
+mu = 2.   # mean radius of emission, in units of light days
+F = 0.025   # minimum radius of emission, in units of fraction of mu
 # Gamma distribution radial profile shape parameter, between 0.01 and 2
-beta = 0.5
+beta = 1.0
 theta_i = 0.   # x-z plane inclination angle in deg, 0 deg is face-on
 theta_i2 = 0.  # x-y plane inclination angle in deg, 0 deg is face-on
 theta_i3 = 90.  # y-z plane inclination angle in deg, 0 deg is face-on
 # opening angle of disk in deg, 0 deg is thin disk, 90 deg is sphere
-theta_o = 5.
+theta_o = 15.
 # -0.5 emit back to center, 0 = isotropic emission, 0.5 emit away from center
 kappa = -0.5
 log_mbh = np.log10(4. * 10**6.)    # log10(black hole mass) in solar masses
@@ -621,7 +650,7 @@ radial_sd_orbiting = 0.01
 angular_sd_flowing = 0.01
 radial_sd_flowing = 0.01
 
-stellar_wind_radius = 0.5   # light days, radius of exclusion for line emission
+stellar_wind_radius = 0.25   # light days, radius of exclusion for emission
 
 params = [mu * meters, F, beta, theta_i * radians,
           theta_i2 * radians, theta_i3 * radians,
@@ -632,9 +661,14 @@ params2 = [angular_sd_orbiting, radial_sd_orbiting,
 params3 = [stellar_wind_radius, kappa]
 
 # Set properties of predicted line profiles:
-times = np.linspace(2017, 2020, 1)
+times = np.linspace(2015.0, 2021.0, 30)
 # times = np.linspace(2017, 2057, 200)
 # times = np.linspace(1900, 2100, 200)
+
+# Select times to show in plot.
+selected_times = np.linspace(2015.0, 2021.0, 3)
+selected_is = [find_nearest_idx(times, st) for st in selected_times]
+
 bins = 60   # this should be equally-spaced bins in lambda
 # lambdaCen = 4861.33   # Hbeta in Angstroms
 lambdaCen = 12936600.0  # H30alpha in Angstroms
