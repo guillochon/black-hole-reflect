@@ -13,7 +13,6 @@ from PyAstronomy.modelSuite import KeplerEllipseModel
 from pylab import (arccos, axis, clf, copy, cos, exp, figure, hist, plot, rand,
                    savefig, scatter, show, sin, sqrt, subplot, transpose,
                    xlabel, ylabel)
-from pyquaternion import Quaternion
 from scipy.integrate import quad
 
 plt.rcParams['text.usetex'] = True
@@ -130,7 +129,7 @@ def rotate(x, y, co, si):
     return [xx, yy]
 
 
-def rotate_vecs(u, o, v, transpose=False):
+def rotate_vecs(u, aa, bb, transpose=False):
     """Rotate vector u to the direction of vector v."""
     rots = []
     if isinstance(u[0], (int, float)):
@@ -141,17 +140,20 @@ def rotate_vecs(u, o, v, transpose=False):
     if transpose:
         ui = list(map(list, zip(*ui)))
 
-    a = np.cross(o, v)
-    angle = 1.0 + np.dot(o, v)
-    qrot = Quaternion(axis=a, angle=angle)
-    # qrot = Quaternion(
-    #     axis=a, radians=np.dot(o, v) + qrot.magnitude)
-    denom = np.array(o) + np.array(v)
-    denom = np.linalg.norm(denom)
-    qrot /= denom
+    a = np.array(aa) / np.linalg.norm(aa)
+    b = np.array(bb) / np.linalg.norm(bb)
+    v = np.cross(a, b)
+    vx = np.array([
+        [0, -v[2], v[1]],
+        [v[2], 0, -v[0]],
+        [-v[1], v[0], 0]
+    ])
+    c = np.dot(a, b)
+    theta = np.arccos(c)
+    rot = np.eye(3) + np.sin(theta) * vx + np.matmul(vx, vx) * (1.0 - c)
 
     for uu in ui:
-        rots.append(qrot.rotate(uu))
+        rots.append(np.matmul(rot, np.array(uu)))
 
     if transpose:
         rots = list(map(list, zip(*rots)))
@@ -161,7 +163,7 @@ def rotate_vecs(u, o, v, transpose=False):
 
 def gas_model(num_clouds, params, other_params, lambdaCen, plot_flag=True):
     """Retrieve the gas positions and velocities."""
-    [mu, F, beta, theta_i, theta_i2, theta_i3, theta_o,
+    [mu, F, beta, theta_o,
      kappa, mbh, f_ellip, f_flow, theta_e] = params
     [angular_sd_orbiting, radial_sd_orbiting,
         angular_sd_flowing, radial_sd_flowing] = other_params
@@ -191,34 +193,34 @@ def gas_model(num_clouds, params, other_params, lambdaCen, plot_flag=True):
     [x, y] = rotate(x, y, cos2, sin2)
 
     # rotate to observer plane:
-    x, y, z = rotate_vecs([x, y, z], [0, 0, 1], [1, 0, 0], transpose=True)
+    x, y, z = rotate_vecs([x, y, z], [0, 0, 1], disk_ang_mom, transpose=True)
 
     # weights for the different points
     # w = 0.5 + kappa * x / sqrt(x * x + y * y + z * z)
     # w /= sum(w)
 
-    if plot_flag:
-        # larger points correspond to more emission from the point
-        ptsize = 5
-        shade = 0.5
-        clf()
-        subplot(2, 2, 1)  # edge-on view 1, observer at +infinity of x-axis
-        scatter(x / meters, y / meters, ptsize, alpha=shade)
-        xlabel('x')
-        ylabel('y')
-        subplot(2, 2, 2)  # edge-on view 2, observer at +infinity of x-axis
-        scatter(x / meters, z / meters, ptsize, alpha=shade)
-        xlabel('x')
-        ylabel('z')
-        subplot(2, 2, 3)   # view of observer looking at plane of sky
-        scatter(y / meters, z / meters, ptsize, alpha=shade)
-        xlabel('y')
-        ylabel('z')
-        subplot(2, 2, 4)   # plot the radial distribution of emission
-        hist(r / meters, 100)
-        xlabel("r")
-        ylabel("p(r)")
-        show()
+    # if plot_flag:
+    #     # larger points correspond to more emission from the point
+    #     ptsize = 5
+    #     shade = 0.5
+    #     clf()
+    #     subplot(2, 2, 1)  # edge-on view 1, observer at +infinity of x-axis
+    #     scatter(x / meters, y / meters, ptsize, alpha=shade)
+    #     xlabel('x')
+    #     ylabel('y')
+    #     subplot(2, 2, 2)  # edge-on view 2, observer at +infinity of x-axis
+    #     scatter(x / meters, z / meters, ptsize, alpha=shade)
+    #     xlabel('x')
+    #     ylabel('z')
+    #     subplot(2, 2, 3)   # view of observer looking at plane of sky
+    #     scatter(y / meters, z / meters, ptsize, alpha=shade)
+    #     xlabel('y')
+    #     ylabel('z')
+    #     subplot(2, 2, 4)   # plot the radial distribution of emission
+    #     hist(r / meters, 100)
+    #     xlabel("r")
+    #     ylabel("p(r)")
+    #     show()
 
     # Now calculate velocities of the emitting gas:
     radius1 = sqrt(2. * grav * mbh / r)
@@ -256,9 +258,9 @@ def gas_model(num_clouds, params, other_params, lambdaCen, plot_flag=True):
     vy = vr * sin(phi) + vphi * cos(phi)
     vz = vr * 0.
 
-    # rotate to apply second inclination angle:
+    # apply rotations
     vx, vy, vz = rotate_vecs(
-        [vx, vy, vz], [0, 0, 1], [1, 0, 0], transpose=True)
+        [vx, vy, vz], [0, 0, 1], disk_ang_mom, transpose=True)
     vx = np.array(vx)
     vy = np.array(vy)
     vz = np.array(vz)
@@ -454,7 +456,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins,
         axy.set_ylim(-boxsize, boxsize)
         for xi, xxyy in enumerate(xy):
             axy.text(xxyy[0] + 0.05 * boxsize, xxyy[1] + 0.05 * boxsize,
-                     star_data[xi][1]['name'], clip_on=True)
+                     star_data[csd_js[xi]][1]['name'], clip_on=True)
 
         xz = transpose(np.array(gas_coords[:3:2]) / meters)
         sxz.set_sizes(ptsizes)
@@ -466,7 +468,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins,
         axz.set_ylim(-boxsize, boxsize)
         for xi, xxzz in enumerate(xz):
             axz.text(xxzz[0] + 0.05 * boxsize, xxzz[1] + 0.05 * boxsize,
-                     star_data[xi][1]['name'], clip_on=True)
+                     star_data[csd_js[xi]][1]['name'], clip_on=True)
 
         # yz = transpose(np.array(gas_coords[1:3]) / meters)
         # syz.set_sizes(ptsizes)
@@ -654,13 +656,10 @@ def load_star_data():
 num_clouds = 5000
 
 # Set model parameter values:
-mu = 2.   # mean radius of emission, in units of light days
+mu = 1.   # mean radius of emission, in units of light days
 F = 0.025   # minimum radius of emission, in units of fraction of mu
 # Gamma distribution radial profile shape parameter, between 0.01 and 2
 beta = 0.5
-theta_i = 0.   # x-z plane inclination angle in deg, 0 deg is face-on
-theta_i2 = 0.  # x-y plane inclination angle in deg, 0 deg is face-on
-theta_i3 = 90.  # y-z plane inclination angle in deg, 0 deg is face-on
 # opening angle of disk in deg, 0 deg is thin disk, 90 deg is sphere
 theta_o = 15.
 # -0.5 emit back to center, 0 = isotropic emission, 0.5 emit away from center
@@ -673,6 +672,11 @@ f_flow = 0.2
 # near-circular orbits
 theta_e = 20.
 
+# Disk angular momentum vector.
+# disk_ang_mom = [8.67114e-7, -5.48489e-6, 2.95402e-6]  # G2
+# disk_ang_mom = [0.800222, -0.37315, -0.469472]  # molecular cloud ring
+disk_ang_mom = [0, 1, 0]  # edge-on to observer
+
 angular_sd_orbiting = 0.01
 radial_sd_orbiting = 0.01
 angular_sd_flowing = 0.01
@@ -680,8 +684,7 @@ radial_sd_flowing = 0.01
 
 stellar_wind_radius = 0.25   # light days, radius of exclusion for emission
 
-params = [mu * meters, F, beta, theta_i * radians,
-          theta_i2 * radians, theta_i3 * radians,
+params = [mu * meters, F, beta,
           theta_o * radians, kappa,
           kg * 10**log_mbh, f_ellip, f_flow, theta_e]  # work in SI units
 params2 = [angular_sd_orbiting, radial_sd_orbiting,
@@ -689,7 +692,7 @@ params2 = [angular_sd_orbiting, radial_sd_orbiting,
 params3 = [stellar_wind_radius, kappa]
 
 # Set properties of predicted line profiles:
-times = np.linspace(2015.0, 2021.0, 30)
+times = np.linspace(2015.0, 2021.0, 100)
 # times = np.linspace(2017, 2057, 200)
 # times = np.linspace(1900, 2100, 200)
 
