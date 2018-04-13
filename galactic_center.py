@@ -30,6 +30,9 @@ kb = c.k_B.si.value  # Boltzmann's constant
 cc = c.c.si.value  # Speed of light
 day = 86400.  # seconds in a day
 year = 3.154 * 10**7.  # seconds in a year
+m_to_km = 1.0e-3  # meters to km
+pc = (1.0 * u.pc).si.value / (1.0 * u.meter).si.value  # pc to meters
+gc_dist = 8.0e3 * pc  # in light days
 
 
 def ionizing_luminosity_fraction(temp, cutoff=13.6):
@@ -528,6 +531,9 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins, fig_name,
             sppl[tii].text(0.1, 0.8, '${\\rm ' + str(int(np.round(
                 selected_times[tii]))) + '}$', transform=sppl[tii].transAxes)
 
+            sppl[tii].set_xlabel("$v {\\rm (km~s^{-1})}$")
+            sppl[tii].set_ylabel("$F/F_{\\rm max}$")
+
             fig.canvas.draw_idle()
 
         # show()
@@ -609,16 +615,20 @@ def relativity(vx, r, Rs, lambdaCen):
     Using the following SR/GR:
     Go from vx to wavelength using SR doppler shift, then add GR grav. z
     """
-    # SR radial velocity redshift
-    factor1 = sqrt((1. - vx / cc) / (1. + vx / cc))
-    # GR gravitational redshift
-    factor2 = 1. / sqrt(1. - Rs / r)
-    lambda_list = factor1 * factor2 * lambdaCen
-    for i in range(0, np.size(vx)):
-        if vx[i] >= cc:
-            lambda_list[i] = 1.0
-            print("Warning! Speeds of light approaching c!")
-    return lambda_list
+    return m_to_km * vx
+
+    # Wavelength space instead. Disabled for now.
+
+    # # SR radial velocity redshift
+    # factor1 = sqrt((1. - vx / cc) / (1. + vx / cc))
+    # # GR gravitational redshift
+    # factor2 = 1. / sqrt(1. - Rs / r)
+    # lambda_list = factor1 * factor2 * lambdaCen
+    # for i in range(0, np.size(vx)):
+    #     if vx[i] >= cc:
+    #         lambda_list[i] = 1.0
+    #         print("Warning! Speeds of light approaching c!")
+    # return lambda_list
 
 
 def load_star_data():
