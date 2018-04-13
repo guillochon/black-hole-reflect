@@ -272,7 +272,7 @@ def gas_model(num_clouds, params, other_params, lambdaCen, plot_flag=True):
     return [x, y, z, vx, vy, vz, wavelength_values]
 
 
-def compute_gas_flux(gas_coords, star_data, times, params, bins,
+def compute_gas_flux(gas_coords, star_data, times, params, bins, fig_name,
                      plot_flag=True):
     """Calculate the flux contribution from each point particle.
 
@@ -531,7 +531,7 @@ def compute_gas_flux(gas_coords, star_data, times, params, bins,
             fig.canvas.draw_idle()
 
         # show()
-        savefig('figs/summary.png'.format(str(i).zfill(3)),
+        savefig('figs/summary'+fig_name+'.png'.format(str(i).zfill(3)),
                 transparent=True, bbox_inches='tight', dpi=2 * 72,
                 facecolor=fig.get_facecolor())
 
@@ -656,16 +656,16 @@ def load_star_data():
 num_clouds = 5000
 
 # Set model parameter values:
-mu = 1.   # mean radius of emission, in units of light days
-F = 0.025   # minimum radius of emission, in units of fraction of mu
+mu = 1.   # 1. mean radius of emission, in units of light days
+F = 0.8   # 0.025 minimum radius of emission, in units of fraction of mu
 # Gamma distribution radial profile shape parameter, between 0.01 and 2
-beta = 0.5
+beta = 1.0   # 0.5
 # opening angle of disk in deg, 0 deg is thin disk, 90 deg is sphere
-theta_o = 15.
+theta_o = 15. # 15.
 # -0.5 emit back to center, 0 = isotropic emission, 0.5 emit away from center
 kappa = -0.5
 log_mbh = np.log10(4. * 10**6.)    # log10(black hole mass) in solar masses
-f_ellip = 0.1  # fraction of particles in near-circular orbits
+f_ellip = 0.99  # 0.1, fraction of particles in near-circular orbits
 # 0-0.5 = inflow, 0.5-1 = outflow of fraction (1-f_ellip) of particles
 f_flow = 0.2
 # angle in plane of v_r and v_phi, 0 -> radial inflow/outflow, 90 ->
@@ -673,9 +673,9 @@ f_flow = 0.2
 theta_e = 20.
 
 # Disk angular momentum vector.
-# disk_ang_mom = [8.67114e-7, -5.48489e-6, 2.95402e-6]  # G2
-# disk_ang_mom = [0.800222, -0.37315, -0.469472]  # molecular cloud ring
-disk_ang_mom = [0, 1, 0]  # edge-on to observer
+#disk_ang_mom = [8.67114e-7, -5.48489e-6, 2.95402e-6]  # G2
+disk_ang_mom = [0.800222, -0.37315, -0.469472]  # molecular cloud ring
+#disk_ang_mom = [0, 1, 0]  # edge-on to observer
 
 angular_sd_orbiting = 0.01
 radial_sd_orbiting = 0.01
@@ -683,6 +683,9 @@ angular_sd_flowing = 0.01
 radial_sd_flowing = 0.01
 
 stellar_wind_radius = 0.25   # light days, radius of exclusion for emission
+
+fig_name = "_molring_elliporb_15open_1mu_p8F"
+#fig_name = "_G2_elliporb_15open_1mu_p8F"
 
 params = [mu * meters, F, beta,
           theta_o * radians, kappa,
@@ -710,7 +713,7 @@ star_data = load_star_data()
 # Calculate things:
 gas_coords = gas_model(num_clouds, params, params2, lambdaCen, plot_flag=False)
 gas_flux = compute_gas_flux(gas_coords, star_data,
-                            times, params3, bins, plot_flag=True)
+                            times, params3, bins, fig_name, plot_flag=True)
 
 
 """
